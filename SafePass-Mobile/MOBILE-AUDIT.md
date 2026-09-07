@@ -1,6 +1,34 @@
 # CentrixMobile mobile audit
 
-Tested 6 September 2026 against the existing release APK, version code 2, package `com.anonymous.SafePassMobile`. This is an audit; the issues below have not been fixed.
+## Notification and staff-selection update — 7 September 2026
+
+Version code 4 corrects the visitor dashboard's profile endpoint, adds a shared unread notification inbox, and selects actual active staff accounts with exact recipient routing and matching availability checks. Android Expo push registration and a durable backend delivery queue are implemented. Firebase credentials and deployment of the changed backend to Render are still required; closed-app delivery has not been verified. See [setup and deployment steps](PUSH-NOTIFICATIONS.md).
+
+Validation: 12 new regression tests pass (7 backend notification/directory tests and 5 mobile notification/profile/selection tests), together with the existing 19 backend and 7 mobile regressions. Web production compilation passes with an entrypoint-size warning (810 KiB against the configured 800 KiB threshold). Tests use mocked accounts and delivery services; they do not change live MongoDB records or send real notifications.
+
+The full release assembled successfully and installed over version 3. Version 4 opens on the Pixel 5 emulator with no Firebase file; the captured Android/React Native startup error log is clear. [Launch evidence](dist/mobile-audit/notifications-v4-launch.png). The new APK is `dist/CentrixMobile.apk` (108,484,969 bytes), SHA-256 `c328ba3d6c41fcf6576fdc4eeab286b325f2abe604c95dd7a99479daccd15b79`. It retains the previous signing certificate and live Render URL. Authenticated live approvals and closed-app delivery remain unverified.
+
+Originally tested 6 September 2026 against release version code 2, package `com.anonymous.SafePassMobile`. The findings below describe that original build. Fixes were implemented and checked on 6–7 September; see the current status here.
+
+## Fix status — version code 3
+
+| Finding | Current status |
+| --- | --- |
+| Google browser authorization error | Replaced with native Android Google sign-in for login, registration and profile linking. Native Google account flow opens and cancellation returns to the app. Cloud registration and successful account sign-in still need verification; see [exact setup values](GOOGLE-SIGN-IN.md). |
+| Password-reset keyboard overlap | Fixed with a compact phone header and a scrolling, keyboard-aware modal. At 360 × 640 dp, entered text stays visible above the keyboard. |
+| Stale connection badge | Fixed with network events, screen focus/app resume checks, periodic health checks, and protection against stale request results. Emulator showed failure on network loss and connected status after restoration without reopening Login. |
+| Status-bar contrast | Login and registration now use dark icons on the light inset. Login contrast verified visually. |
+| Standalone attendance render error | Imported Modal; the loaded-screen render regression passes. |
+| Standalone attendance export/print | Added native CSV file sharing and the existing PDF report flow, including CSV escaping and invalid-date handling. File-sharing and report-content tests pass with mocked device dependencies. |
+| Admin duplicate academic ID error | Moved the academic role flag into the shared scope. Both student and teacher duplicate server-response regressions pass. |
+
+The earlier version code 3 release assembled successfully, its signature verified, and installation over the previous app succeeded. It retained the live Render API URL. The downloadable [dist/CentrixMobile.apk](dist/CentrixMobile.apk) has since been replaced by version 4 described above.
+
+Seven mobile regression tests pass via `rtk proxy node --test SafePass-Mobile/scripts/tests/mobileFixes.test.cjs` from the repository root. The web production compilation passed with an entrypoint-size warning (806 KiB versus its configured 800 KiB threshold). The final phone-header adjustment was compiled in the Android release. The reference scan found no undefined identifiers, and the final public Android checks produced no React Native or Android runtime errors in the captured error log.
+
+Evidence: [visible input with keyboard](dist/mobile-audit/fixed-03-small-reset-keyboard.png), [network lost](dist/mobile-audit/fixed-04-network-offline.png), [network restored](dist/mobile-audit/fixed-05-network-restored.png), [native Google account flow](dist/mobile-audit/fixed-07-google-account-screen.png), [Google cancellation returns to login](dist/mobile-audit/fixed-08-google-cancelled.png).
+
+Successful authenticated workflows, live record creation, OTP delivery, and physical NFC/ESP32 remain unverified without a test account/device. Google Cloud credentials were not modified. No live database records were changed during the checks.
 
 ## Confirmed in the Android emulator
 

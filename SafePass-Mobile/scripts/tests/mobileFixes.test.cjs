@@ -35,6 +35,7 @@ test('Attendance screen renders its Modal after loading', () => {
   const screen = load('screens/AttendanceRecordsScreen.jsx', {
     react, 'react-native': rn, 'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     '@expo/vector-icons': { Ionicons: 'Ionicons' }, '../utils/ApiService': {},
+    '../utils/Alert': { alert() {} },
     '../utils/saveCsv': {}, '../utils/printUtils': {}, '../utils/attendanceExport': {},
   });
   screen.default({ navigation: {} });

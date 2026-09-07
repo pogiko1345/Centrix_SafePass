@@ -14,6 +14,20 @@ $env:EXPO_PUBLIC_ENABLE_DEV_FALLBACK = 'false'
 $env:EXPO_PUBLIC_E2E_LOCAL_ONLY = 'false'
 $buildVariant = (Get-Culture).TextInfo.ToTitleCase($Variant)
 
+# Generate native bindings on the real drive before using a short SUBST path.
+# React Native codegen cannot relativize paths across the two drive letters.
+$canonicalProjectDirectory = rtk proxy node -e "process.stdout.write(require('fs').realpathSync.native(process.argv[1]))" $projectDirectory
+if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the Android project directory.' }
+if ([IO.Path]::GetPathRoot($canonicalProjectDirectory) -ne [IO.Path]::GetPathRoot($projectDirectory)) {
+    Push-Location (Join-Path $canonicalProjectDirectory 'android')
+    try {
+        rtk proxy .\gradlew.bat generateCodegenArtifactsFromSchema --console=plain --max-workers=2 '-Pkotlin.incremental=false'
+        if ($LASTEXITCODE -ne 0) { throw 'Android native code generation failed.' }
+    } finally {
+        Pop-Location
+    }
+}
+
 Push-Location (Join-Path $projectDirectory 'android')
 try {
     # Substituted drives can disagree with canonical dependency paths in Kotlin's cache.

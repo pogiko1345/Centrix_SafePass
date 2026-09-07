@@ -1,6 +1,7 @@
 ﻿import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
+import { emitNotificationLogout } from './notificationEvents';
 let AsyncStorage;
 
 if (Platform.OS === 'web') {
@@ -394,7 +395,24 @@ class ApiService {
   }
 
   async clearAuth({ preserveTrustedDevice = true } = {}) {
+    emitNotificationLogout();
+    const oldToken = this.token;
     this.token = null;
+    try {
+      const token = await AsyncStorage.getItem('pushDeviceToken');
+      if (token && oldToken) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        try {
+          await fetch(`${API_BASE_URL}/notifications/device`, {
+            method: 'DELETE', signal: controller.signal,
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${oldToken}` },
+            body: JSON.stringify({ token }),
+          });
+        } finally { clearTimeout(timeout); }
+      }
+      await AsyncStorage.removeItem('pushDeviceToken');
+    } catch { /* Logout must also work offline. */ }
     await removeSensitiveItems(
       preserveTrustedDevice
         ? SENSITIVE_STORAGE_KEYS.filter((key) => !TRUSTED_DEVICE_STORAGE_KEYS.includes(key))
@@ -686,21 +704,23 @@ async register(userData) {
   }
 
   async getVisitorProfileCached() {
+    const user = await this.getCurrentUser();
+    if (!user?._id) throw new Error("Please sign in to view your visits.");
+    const cacheKey = `visitorDashboardCache:${user._id}`;
     try {
-      // Try network first for fresh data
-      const response = await this.fetch("/profile");
-      await AsyncStorage.setItem("visitorProfileCache", JSON.stringify(response.user));
+      // The dashboard needs appointments and visitor status, not just /profile's user.
+      const response = await this.fetch("/visitor/profile");
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(response)).catch(() => {});
       return response;
     } catch (error) {
-      // Fallback to cache if network fails
+      if (!isNetworkLikeError(error)) throw error;
       logApiDebug("Network profile fetch failed, trying cache:", error.message);
-      const cachedProfileJson = await AsyncStorage.getItem("visitorProfileCache");
+      const cachedProfileJson = await AsyncStorage.getItem(cacheKey);
 
       if (cachedProfileJson) {
-        const cachedUser = JSON.parse(cachedProfileJson);
+        const cachedProfile = JSON.parse(cachedProfileJson);
         return {
-          success: true,
-          user: cachedUser,
+          ...cachedProfile,
           fromCache: true,
           message: "Showing cached profile data (offline)"
         };
@@ -1684,12 +1704,13 @@ async verifyCredentials(email, password) {
     }
   }
 
-  async getAppointmentAvailability({ date, department, departments } = {}) {
+  async getAppointmentAvailability({ date, department, departments, staffAssignments = {} } = {}) {
     try {
       const queryString = new URLSearchParams({
         date: date || "",
         department: department || "",
         departments: Array.isArray(departments) ? departments.join(",") : departments || "",
+        staffAssignments: JSON.stringify(staffAssignments),
       }).toString();
       return await this.fetch(`/appointments/availability?${queryString}`);
     } catch (error) {

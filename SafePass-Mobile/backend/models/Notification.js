@@ -17,7 +17,7 @@ const notificationSchema = new mongoose.Schema({
   // For targeting specific users/roles
   targetRole: { 
     type: String, 
-    enum: ['security', 'guard', 'staff', 'admin', 'visitor', 'all'],
+    enum: ['security', 'guard', 'staff', 'admin', 'visitor', 'student', 'teacher', 'all'],
     default: 'all'
   },
   targetUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Specific user
@@ -38,10 +38,12 @@ const notificationSchema = new mongoose.Schema({
   
   // Timestamps
   createdAt: { type: Date, default: Date.now },
+  pushQueued: { type: Boolean, default: false, select: false },
   expiresAt: Date // Auto-delete after this date
 });
 
 notificationSchema.index({ targetRole: 1, createdAt: -1 });
+notificationSchema.index({ pushQueued: 1, createdAt: 1 });
 notificationSchema.index({ targetUser: 1, createdAt: -1 });
 notificationSchema.index({ createdAt: -1 });
 notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0, sparse: true });

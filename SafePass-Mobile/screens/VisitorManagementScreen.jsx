@@ -1,3 +1,4 @@
+import Alert from '../utils/Alert';
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -5,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Modal,
   TextInput,
   Platform,

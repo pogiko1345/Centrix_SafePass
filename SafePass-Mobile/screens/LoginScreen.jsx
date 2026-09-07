@@ -1,14 +1,14 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import { WEB_VERSION_LABEL } from "../utils/webBranding";
+import Alert from '../utils/Alert';
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Keyboard,
   Platform,
   StatusBar,
   Modal,
@@ -89,7 +89,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
   const effectiveRole = IS_VISITOR_ONLY_APP ? "visitor" : normalizeRole(role) || "campus";
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const showDesktopLoginDesign = isWeb && viewportWidth >= 1080;
-  const shouldLockDesktopScroll = showDesktopLoginDesign && viewportHeight >= 760;
+  const shouldLockDesktopScroll = false;
   const isCompactLogin = viewportWidth <= 420;
   const isTabletLogin = viewportWidth >= 768;
   const loginHorizontalPadding = isCompactLogin ? 12 : 20;
@@ -212,16 +212,6 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
 
   // ============ FORGOT PASSWORD STATES ============
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [recoveryKeyboardVisible, setRecoveryKeyboardVisible] = useState(false);
-  useEffect(() => {
-    if (!showForgotPassword) {
-      setRecoveryKeyboardVisible(false);
-      return undefined;
-    }
-    const show = Keyboard.addListener("keyboardDidShow", () => setRecoveryKeyboardVisible(true));
-    const hide = Keyboard.addListener("keyboardDidHide", () => setRecoveryKeyboardVisible(false));
-    return () => { show.remove(); hide.remove(); };
-  }, [showForgotPassword]);
   const [resetEmail, setResetEmail] = useState("");
   const [resetEmailError, setResetEmailError] = useState("");
   const [resetOtp, setResetOtp] = useState("");
@@ -270,6 +260,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
 
   // ============ ANIMATIONS ============
   const playLoginEntrance = () => {
+    if (isWeb) { fadeAnim.setValue(1); slideAnim.setValue(0); return; }
     fadeAnim.setValue(0);
     slideAnim.setValue(14);
     Animated.parallel([
@@ -292,6 +283,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
     if (skipArrivalSplash) {
       playLoginEntrance();
     }
+    if (isWeb) { fadeAnim.setValue(1); slideAnim.setValue(0); return; }
     const logoPulse = Animated.loop(
       Animated.sequence([
         Animated.timing(logoPulseAnim, {
@@ -336,7 +328,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
     );
     logoPulse.start();
     statusPulse.start();
-    buttonFloat.start();
+    loginButtonFloatAnim.setValue(0);
 
     return () => {
       logoPulse.stop();
@@ -1848,14 +1840,14 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                           <Text style={loginStyles.loginVisualMetaText}>
                             {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date().toLocaleDateString()}
                           </Text>
-                          <Text style={loginStyles.loginVisualMetaText}>Secure Campus Access System v2.0</Text>
+                          <Text style={loginStyles.loginVisualMetaText}>{WEB_VERSION_LABEL}</Text>
                           <Text style={loginStyles.loginVisualContactTitle}>
                             Sapphire International Aviation Academy
                           </Text>
                           <Text style={loginStyles.loginVisualContactLine}>Tel No: (02) 7091 - 3362</Text>
                           <Text style={loginStyles.loginVisualContactLine}>Mobile No: 0917 580 4858</Text>
                           <Text style={loginStyles.loginVisualCopyright}>
-                            Copyright 2024. Sapphire International Aviation Academy
+                            Copyright {new Date().getFullYear()}. Sapphire International Aviation Academy
                           </Text>
                         </View>
                         <View style={loginStyles.loginVisualSocialDock}>
@@ -1991,7 +1983,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                 <>
                   {/* Username / Email Input */}
                   <View style={loginStyles.inputBox}>
-                    <Text style={loginStyles.label}>Username / Email</Text>
+                    <Text nativeID="login-email-label" style={loginStyles.label}>Username / Email</Text>
                     <View style={[
                       loginStyles.inputContainer,
                       errors.email && loginStyles.inputError
@@ -2000,6 +1992,11 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                       <TextInput
                         ref={emailInputRef}
                         style={loginStyles.input}
+                        nativeID="login-email"
+                        accessibilityLabel="Username / Email"
+                        autoComplete="username"
+                        autoCorrect={false}
+                        {...(isWeb ? { 'aria-labelledby': 'login-email-label', 'aria-describedby': errors.email ? 'login-email-error' : undefined, 'aria-invalid': Boolean(errors.email) } : {})}
                         placeholder="Enter username or email"
                         placeholderTextColor={brandColors.textMuted}
                         value={email}
@@ -2017,7 +2014,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                       />
                     </View>
                     {errors.email && (
-                      <Text style={loginStyles.errorText}>{errors.email}</Text>
+                      <Text nativeID="login-email-error" accessibilityLiveRegion="polite" style={loginStyles.errorText}>{errors.email}</Text>
                     )}
                   </View>
 
@@ -2029,7 +2026,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
 
                   {/* Password Input with Error Message Below */}
                   <View style={loginStyles.inputBox}>
-                    <Text style={loginStyles.label}>Password</Text>
+                    <Text nativeID="login-password-label" style={loginStyles.label}>Password</Text>
                     <View style={[
                       loginStyles.inputContainer,
                       errors.password && loginStyles.inputError
@@ -2038,6 +2035,11 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                       <TextInput
                         ref={passwordInputRef}
                         style={loginStyles.input}
+                        nativeID="login-password"
+                        accessibilityLabel="Password"
+                        autoComplete="current-password"
+                        autoCorrect={false}
+                        {...(isWeb ? { 'aria-labelledby': 'login-password-label', 'aria-describedby': errors.password ? 'login-password-error' : undefined, 'aria-invalid': Boolean(errors.password) } : {})}
                         placeholder="Enter your password"
                         placeholderTextColor={brandColors.textMuted}
                         value={password}
@@ -2048,7 +2050,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                         returnKeyType="done"
                         onSubmitEditing={handleLogin}
                       />
-                      <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel={showPassword ? "Hide password" : "Show password"} onPress={() => setShowPassword(!showPassword)}>
                         <Ionicons 
                           name={showPassword ? "eye-off-outline" : "eye-outline"} 
                           size={20} 
@@ -2057,7 +2059,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                       </TouchableOpacity>
                     </View>
                     {errors.password && (
-                      <Text style={loginStyles.errorText}>{errors.password}</Text>
+                      <Text nativeID="login-password-error" accessibilityLiveRegion="polite" style={loginStyles.errorText}>{errors.password}</Text>
                     )}
                   </View>
 
@@ -2090,6 +2092,8 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                         <TextInput
                           style={[loginStyles.input, loginStyles.visitorOtpInput]}
                           placeholder="6-digit OTP"
+                          accessibilityLabel="Verification code"
+                          autoComplete="one-time-code"
                           placeholderTextColor={brandColors.textMuted}
                           value={loginOtpCode}
                           onChangeText={handleLoginOtpChange}
@@ -2353,7 +2357,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                 <Text style={loginStyles.footerText}>
                   {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date().toLocaleDateString()}
                 </Text>
-                <Text style={loginStyles.footerText}>Secure Campus Access System v2.0</Text>
+                <Text style={loginStyles.footerText}>{WEB_VERSION_LABEL}</Text>
                 <View style={[loginStyles.footerContactCard, footerContactCardResponsiveStyle]}>
                   <Text style={loginStyles.footerContactTitle}>
                     Sapphire International Aviation Academy
@@ -2389,7 +2393,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="none"
               >
-              {recoveryKeyboardVisible && (
+              {isCompactLogin && (
                 <View style={loginStyles.modalCompactHeader}>
                   <Text style={loginStyles.modalCompactTitle}>{resetStepTitle}</Text>
                   <TouchableOpacity accessibilityLabel="Close password recovery" onPress={handleCloseForgotPassword} style={{ padding: 8 }}>
@@ -2397,7 +2401,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                   </TouchableOpacity>
                 </View>
               )}
-              <View style={[loginStyles.modalHero, forgotModalHeroResponsiveStyle, recoveryKeyboardVisible && { display: "none" }]}>
+              <View style={[loginStyles.modalHero, forgotModalHeroResponsiveStyle, isCompactLogin && { display: "none" }]}>
                 <View style={[loginStyles.modalHeroTopRow, forgotModalHeroTopRowResponsiveStyle]}>
                   <View style={[loginStyles.modalBrandBadge, forgotModalBrandBadgeResponsiveStyle]}>
                     <Image
@@ -2466,6 +2470,8 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                         <TextInput
                           style={loginStyles.input}
                           placeholder="your.email@sapphireaviationacademy.edu.ph"
+                          accessibilityLabel="Account email address"
+                          autoComplete="email"
                           placeholderTextColor={brandColors.textMuted}
                           value={resetEmail}
                           onChangeText={(text) => {
@@ -2537,6 +2543,8 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                         <TextInput
                           style={loginStyles.input}
                           placeholder="000000"
+                          accessibilityLabel="Password reset verification code"
+                          autoComplete="one-time-code"
                           placeholderTextColor={brandColors.textMuted}
                           value={resetOtp}
                           onChangeText={(text) => {
@@ -2663,6 +2671,8 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                         <TextInput
                           style={loginStyles.input}
                           placeholder="Enter new password"
+                          accessibilityLabel="New password"
+                          autoComplete="new-password"
                           placeholderTextColor={brandColors.textMuted}
                           value={newPassword}
                           onChangeText={(text) => {
@@ -2721,6 +2731,8 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                         <TextInput
                           style={loginStyles.input}
                           placeholder="Confirm new password"
+                          accessibilityLabel="Confirm new password"
+                          autoComplete="new-password"
                           placeholderTextColor={brandColors.textMuted}
                           value={confirmNewPassword}
                           onChangeText={(text) => {
@@ -2836,4 +2848,3 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
     </SafeAreaView>
   );
 }
-

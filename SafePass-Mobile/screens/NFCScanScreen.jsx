@@ -1,7 +1,7 @@
+import Alert from '../utils/Alert';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Modal,
   Platform,

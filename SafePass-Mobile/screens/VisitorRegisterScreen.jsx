@@ -1,3 +1,4 @@
+import Alert from '../utils/Alert';
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -8,7 +9,6 @@ import {
   StatusBar,
   Platform,
   KeyboardAvoidingView,
-  Alert,
   Image,
   ActivityIndicator,
   Animated,
@@ -453,6 +453,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
   const shouldReturnHome = route?.params?.fromHome || !navigation.canGoBack();
   const { width: viewportWidth } = useWindowDimensions();
   const isCompactRegister = viewportWidth <= 420;
+  const isSimpleRegister = Platform.OS === "web" && viewportWidth < 640;
   const isTabletRegister = viewportWidth >= 768;
   const isDesktopRegister = viewportWidth >= 980;
   const useTwoColumnFields = isDesktopRegister || viewportWidth >= 640;
@@ -485,7 +486,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
     lineHeight: isCompactRegister ? 20 : 22,
   };
   const formShellResponsiveStyle = Platform.OS === "web"
-    ? { maxWidth: registerShellMaxWidth }
+    ? { maxWidth: registerShellMaxWidth, ...(isSimpleRegister ? { marginTop: 16 } : {}) }
     : null;
   const formShellDesktopStyle = isDesktopRegister
     ? visitorRegisterStyles.formShellDesktop
@@ -670,6 +671,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
   }, []);
 
   useEffect(() => {
+    if (Platform.OS === "web") { screenFadeAnim.setValue(1); headerAnim.setValue(1); formAnim.setValue(1); return; }
     Animated.parallel([
       Animated.timing(screenFadeAnim, {
         toValue: 1,
@@ -1460,7 +1462,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
           bounces={false}
           contentContainerStyle={visitorRegisterStyles.scrollContainer}
         >
-          {!isDesktopRegister ? (
+          {!isDesktopRegister && !isSimpleRegister ? (
           <Animated.View style={headerEntranceStyle}>
             <LinearGradient
               colors={["#041E42", "#0A3D91", "#0A3D91"]}
@@ -1564,7 +1566,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
                 isDesktopRegister && visitorRegisterStyles.registerFormPaneDesktop,
               ]}
             >
-            {!isDesktopRegister ? (
+            {!isDesktopRegister && !isSimpleRegister ? (
               <Animated.View
                 style={[
                   visitorRegisterStyles.progressContainer,
@@ -1630,6 +1632,10 @@ export default function VisitorRegisterScreen({ navigation, route }) {
             ) : null}
 
             <View style={[visitorRegisterStyles.content, contentResponsiveStyle]}>
+              {isSimpleRegister && <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to login" onPress={handleBack} style={{ paddingVertical: 8 }}><Text style={{ color: '#0A3D91', fontWeight: '700' }}>Back</Text></TouchableOpacity>
+                <Text style={{ color: '#475569', alignSelf: 'center' }}>{completionCount} of {totalRegistrationFields} details complete</Text>
+              </View>}
               <View style={[visitorRegisterStyles.sectionHeader, sectionHeaderResponsiveStyle]}>
                 <View style={visitorRegisterStyles.sectionTextBlock}>
                   <Text style={visitorRegisterStyles.sectionTitle}>
@@ -1648,7 +1654,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
                 </View>
               </View>
 
-              {isDesktopRegister ? null : renderStepInsights()}
+              {isDesktopRegister || isSimpleRegister ? null : renderStepInsights()}
 
               <View style={{ marginTop: 12, marginBottom: 2, padding: isCompactRegister ? 10 : 11, borderWidth: 1, borderColor: "#D8E6F8", borderRadius: 10, backgroundColor: "#F8FBFF" }}>
                 <Text style={{ textAlign: "center", color: "#334155", fontSize: 11, fontWeight: "800", marginBottom: 3 }}>
@@ -1746,7 +1752,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
                       >
                         <Ionicons name={config.icon} size={20} color="#0A3D91" />
                       </View>
-                      <Text style={visitorRegisterStyles.cardLabel}>{config.label}</Text>
+                      <Text nativeID={`register-${field}-label`} style={visitorRegisterStyles.cardLabel}>{config.label}</Text>
                       <Text style={visitorRegisterStyles.requiredBadge}>Required</Text>
                     </View>
                     <View
@@ -1763,6 +1769,11 @@ export default function VisitorRegisterScreen({ navigation, route }) {
                       />
                       <TextInput
                         style={visitorRegisterStyles.input}
+                        nativeID={`register-${field}`}
+                        accessibilityLabel={config.label}
+                        autoComplete={{ fullName: 'name', email: 'email', username: 'username', phone: 'tel', password: 'new-password', confirmPassword: 'new-password' }[field]}
+                        autoCorrect={false}
+                        {...(Platform.OS === 'web' ? { 'aria-labelledby': `register-${field}-label`, 'aria-describedby': errors[field] ? `register-${field}-error` : undefined, 'aria-invalid': Boolean(errors[field]), 'aria-required': true } : {})}
                         placeholder={config.placeholder}
                         placeholderTextColor="#9CA3AF"
                         value={formData[field]}
@@ -1794,7 +1805,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
                       ) : null}
                     </View>
                     {errors[field] && (
-                      <Text style={visitorRegisterStyles.errorText}>{errors[field]}</Text>
+                      <Text nativeID={`register-${field}-error`} accessibilityLiveRegion="polite" style={visitorRegisterStyles.errorText}>{errors[field]}</Text>
                     )}
                     {field === "password" ? (
                       <View style={visitorRegisterStyles.passwordChecklist}>

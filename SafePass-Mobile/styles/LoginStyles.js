@@ -37,7 +37,8 @@ export default StyleSheet.create({
   },
 
   loginDesktopFrame: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 0,
     minHeight: "100%",
     width: "100%",
     position: "relative",
@@ -239,7 +240,8 @@ export default StyleSheet.create({
 
   loginStageDesktop: {
     maxWidth: 1320,
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 0,
     alignSelf: "center",
     alignItems: "center",
     justifyContent: "center",
@@ -419,7 +421,7 @@ export default StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(216,231,243,0.95)",
     zIndex: 2,
-    transform: [{ perspective: 1500 }, { rotateX: "1.2deg" }],
+    transform: [],
     ...Platform.select({
       web: {
         transformStyle: "preserve-3d",

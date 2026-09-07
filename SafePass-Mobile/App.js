@@ -9,6 +9,8 @@ import {
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { brandColors } from "./styles/brandColors";
 import AviationSplash from "./components/AviationSplash";
+import NotificationInbox from "./components/NotificationInbox";
+import WebAlertHost from "./components/WebAlertHost";
 import { AviationTransitionContext } from "./utils/AviationTransitionContext";
 
 // ============ ONLY VISITOR, SECURITY, ADMIN SCREENS ============
@@ -964,6 +966,8 @@ export default function App() {
         </Suspense>
         </ChunkLoadRecoveryBoundary>
         </NavigationContainer>
+        <NotificationInbox currentUser={currentUser} />
+        <WebAlertHost />
         {aviationTransition ? (
           <AviationSplash
             {...aviationTransition}

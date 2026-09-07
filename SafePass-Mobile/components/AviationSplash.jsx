@@ -26,6 +26,15 @@ export default function AviationSplash({
   }, [onBeforeFade]);
 
   useEffect(() => {
+    if (Platform.OS === "web") {
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      // Keep navigation feedback brief; reduced-motion users skip the flight animation.
+      const timer = setTimeout(() => {
+        onBeforeFadeRef.current?.();
+        onDoneRef.current?.();
+      }, reducedMotion ? 0 : 350);
+      return () => clearTimeout(timer);
+    }
     progressAnim.setValue(0);
     overlayAnim.setValue(1);
 

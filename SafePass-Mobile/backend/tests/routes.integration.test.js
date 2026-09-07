@@ -289,6 +289,7 @@ registerMockModule("../models/VisitorMovementLog.js", VisitorMovementLogMock);
 registerMockModule("../models/NfcCheckpoint.js", NfcCheckpointMock);
 registerMockModule("../models/SmsNotificationLog.js", SmsNotificationLogMock);
 registerMockModule("../models/Counter.js", CounterMock);
+registerMockModule("../models/PushDevice.js", {});
 
 const app = require("../server");
 

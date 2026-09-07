@@ -22,6 +22,9 @@ const {
   getAppointmentOptions,
 } = require("./services/appointmentOptionsService");
 const createAppointmentOptionsRoutes = require("./routes/appointmentOptionsRoutes");
+const { parseStaffAssignments } = require("./services/staffDirectoryService");
+const createPushDeviceRoutes = require("./routes/pushDeviceRoutes");
+const { createPushWorker } = require("./services/pushNotificationService");
 const { createRateLimiter, getRateLimitKey } = require("./utils/securityUtils");
 const {
   DEFAULT_SYSTEM_SETTINGS,
@@ -1778,6 +1781,7 @@ const createSystemActivity = async ({
 
 app.use("/api/admin", authMiddleware, requireRoles("admin"));
 app.use("/api/staff", authMiddleware, requireRoles("staff", "admin"));
+app.use("/api", createPushDeviceRoutes({ authMiddleware }));
 app.use(
   "/api",
   createAppointmentOptionsRoutes({
@@ -1824,6 +1828,19 @@ const createRoleNotification = async ({
     console.error("Create notification error:", error);
   }
 };
+
+if (process.env.NODE_ENV !== "test" && !isVercelRuntime) {
+  const pushWorker = createPushWorker({
+    Notification, User,
+    PushDevice: require("./models/PushDevice"),
+    PushDelivery: require("./models/PushDelivery"),
+  });
+  const pushTimer = setInterval(() => {
+    if (mongoose.connection.readyState !== 1 || process.env.PUSH_NOTIFICATIONS_ENABLED === "false") return;
+    pushWorker.runOnce().catch(error => console.error("Notification delivery worker:", error.message));
+  }, 10000);
+  pushTimer.unref();
+}
 
 const formatVisitSchedule = (visitDate, visitTime) => {
   const dateParts = getAppointmentDateParts(visitDate);
@@ -6204,8 +6221,9 @@ const countStaffAppointmentsForSlot = async ({
   return Visitor.countDocuments(query);
 };
 
-const findActiveStaffForDepartment = (departmentLabel = "") =>
+const findActiveStaffForDepartment = (departmentLabel = "", staffId = null) =>
   User.findOne({
+    ...(staffId ? { _id: staffId } : {}),
     role: "staff",
     isActive: true,
     status: "active",
@@ -10919,6 +10937,9 @@ app.post("/api/appointments/id-ocr/validate", authMiddleware, async (req, res) =
 app.get("/api/appointments/availability", authMiddleware, async (req, res) => {
   try {
     const { date, department, departments } = req.query || {};
+    let staffAssignments;
+    try { staffAssignments = parseStaffAssignments(req.query.staffAssignments); }
+    catch (error) { return res.status(400).json({ success: false, message: error.message }); }
     const requestedDepartments = [
       ...new Set(
         String(departments || department || "")
@@ -10949,12 +10970,10 @@ app.get("/api/appointments/availability", authMiddleware, async (req, res) => {
 
     const staffRoutes = [];
     for (const requestedDepartment of requestedDepartments) {
-      const routedStaff = await User.findOne({
-        role: "staff",
-        isActive: true,
-        status: "active",
-        department: getStaffDepartmentQuery(requestedDepartment),
-      }).sort({ lastLogin: -1, createdAt: 1 });
+      if (req.query.staffAssignments != null && !staffAssignments[requestedDepartment]) {
+        return res.status(400).json({ success: false, message: "Please select an available staff account for every office." });
+      }
+      const routedStaff = await findActiveStaffForDepartment(requestedDepartment, staffAssignments[requestedDepartment]);
 
       if (!routedStaff) {
         return res.json({
@@ -11077,6 +11096,9 @@ app.get("/api/appointments/availability", authMiddleware, async (req, res) => {
 // Visitor appointment request / reappointment
 app.put("/api/visitors/:userId/visit", authMiddleware, async (req, res) => {
   try {
+    let staffAssignments;
+    try { staffAssignments = parseStaffAssignments(req.body?.staffAssignments); }
+    catch (error) { return res.status(400).json({ success: false, message: error.message }); }
     const requesterRole = String(req.user.role || "").toLowerCase();
     if (requesterRole !== "visitor" && requesterRole !== "admin") {
       return res.status(403).json({
@@ -11133,6 +11155,9 @@ app.put("/api/visitors/:userId/visit", authMiddleware, async (req, res) => {
       ),
     ];
     const requestedDepartment = requestedDepartments[0] || "";
+    if (req.body.staffAssignments != null && requestedDepartments.some((office) => !staffAssignments[office])) {
+      return res.status(400).json({ success: false, message: "Please select an available staff account for every office." });
+    }
     const resolvedPurpose =
       normalizedPurposeCategory === "Other" && normalizedCustomPurpose
         ? normalizedCustomPurpose
@@ -11286,12 +11311,7 @@ app.put("/api/visitors/:userId/visit", authMiddleware, async (req, res) => {
     const visitorFullName = `${user.firstName} ${user.lastName}`.trim();
     const staffRoutes = [];
     for (const departmentLabel of requestedDepartments) {
-      const routedStaff = await User.findOne({
-        role: "staff",
-        isActive: true,
-        status: "active",
-        department: getStaffDepartmentQuery(departmentLabel),
-      }).sort({ lastLogin: -1, createdAt: 1 });
+      const routedStaff = await findActiveStaffForDepartment(departmentLabel, staffAssignments[departmentLabel]);
 
       if (!routedStaff) {
         return res.status(400).json({
@@ -13215,7 +13235,7 @@ app.get("/api/notifications", authMiddleware, async (req, res) => {
 
     const notifications = await Notification.find(query)
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
+      .limit(Math.min(100, Math.max(1, parseInt(limit, 10) || 50)))
       .populate("relatedVisitor", "fullName visitDate visitTime appointmentStatus appointmentDepartment assignedOffice")
       .populate("relatedUser", "firstName lastName");
 

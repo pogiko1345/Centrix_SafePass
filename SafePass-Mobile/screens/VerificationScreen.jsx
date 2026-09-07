@@ -1,3 +1,4 @@
+import Alert from '../utils/Alert';
 // VerificationScreen.jsx - COMPLETELY FIXED with proper AsyncStorage
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -7,7 +8,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -638,6 +638,8 @@ export default function VerificationScreen({ navigation, route }) {
                             <TextInput
                               style={verificationStyles.input}
                               placeholder="912 345 6789"
+                              accessibilityLabel="Mobile number without country code"
+                              autoComplete="tel-national"
                               placeholderTextColor="#9CA3AF"
                               value={phoneNumber}
                               onChangeText={(text) => {
@@ -749,6 +751,7 @@ export default function VerificationScreen({ navigation, route }) {
                             })}
                             <TextInput
                               ref={otpInputRef}
+                              accessibilityLabel="Six-digit verification code"
                               style={verificationStyles.otpHiddenInput}
                               value={otpCode}
                               onChangeText={handleOtpChange}

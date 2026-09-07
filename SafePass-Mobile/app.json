@@ -23,7 +23,7 @@
       }
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/LogoSapphireAppIcon.png",
         "backgroundColor": "#052044"
@@ -44,6 +44,7 @@
       }
     },
     "plugins": [
+      ["expo-notifications", { "defaultChannel": "campus-updates" }],
       "expo-font",
       "expo-secure-store",
       "expo-sharing",

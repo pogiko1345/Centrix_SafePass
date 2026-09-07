@@ -1,3 +1,4 @@
+import { subscribeNotificationUpdates } from "../utils/notificationEvents";
 ﻿import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
@@ -645,9 +646,12 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const [isCheckInLoading, setIsCheckInLoading] = useState(false);
   const [isCheckOutLoading, setIsCheckOutLoading] = useState(false);
   const [appointmentAvailability, setAppointmentAvailability] = useState(null);
+  const availabilityRequestRef = useRef(0);
   const [isLoadingAppointmentSlots, setIsLoadingAppointmentSlots] = useState(false);
+  const [staffDirectoryError, setStaffDirectoryError] = useState("");
   const [appointmentOptions, setAppointmentOptions] = useState({
-    offices: APPOINTMENT_DEPARTMENT_OPTIONS.map((label) => ({ label, enabled: true })),
+    offices: [],
+    staff: [],
     purposes: APPOINTMENT_PURPOSE_OPTIONS.map((label) => ({ label, enabled: true })),
     timeSlots: DEFAULT_APPOINTMENT_TIME_SLOTS,
   });
@@ -656,6 +660,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     preferredTime: null,
     department: "",
     departments: [],
+    staffAssignments: {},
     purposeSelection: "",
     customPurpose: "",
     idType: "",
@@ -732,14 +737,19 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const approvedActionCardWidth = isTabletVisitorDashboard ? "48.5%" : "100%";
   const compactApprovedActionCardWidth = viewportWidth <= 560 ? "100%" : approvedActionCardWidth;
 
+  useEffect(() => subscribeNotificationUpdates(() => {
+    loadVisitorData({ silent: true, force: true });
+  }), []);
+
   const loadManagedAppointmentOptions = async () => {
     try {
       const response = await ApiService.getAppointmentOptions();
       if (response?.success && response?.options) {
         setAppointmentOptions(response.options);
+        setStaffDirectoryError("");
       }
     } catch (error) {
-      console.log("Load appointment options error:", error);
+      setStaffDirectoryError("Cannot load available staff. Tap to retry.");
     }
   };
 
@@ -933,9 +943,10 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     [appointmentOptions.purposes],
   );
   const activeAppointmentDepartmentOptions = useMemo(
-    () => getEnabledAppointmentOptionLabels(appointmentOptions.offices, APPOINTMENT_DEPARTMENT_OPTIONS),
+    () => getEnabledAppointmentOptionLabels(appointmentOptions.offices, []),
     [appointmentOptions.offices],
   );
+  const activeAppointmentStaffOptions = Array.isArray(appointmentOptions.staff) ? appointmentOptions.staff : [];
   const appointmentTimeOptions = useMemo(() => {
     const configuredSlots = Array.isArray(appointmentOptions.timeSlots) ? appointmentOptions.timeSlots : [];
     const activeSlots = configuredSlots.filter((slot) => slot?.enabled !== false);
@@ -959,7 +970,8 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           ? [prev.department]
           : [];
       const nextDepartments = selectedDepartments.filter((department) =>
-        activeAppointmentDepartmentOptions.includes(department),
+        activeAppointmentDepartmentOptions.includes(department) &&
+          activeAppointmentStaffOptions.some((staff) => staff.department === department && staff.id === prev.staffAssignments?.[department]),
       );
       const nextDepartment = nextDepartments[0] || "";
       const nextPurpose = activeAppointmentPurposeOptions.includes(prev.purposeSelection)
@@ -979,6 +991,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         ...prev,
         department: nextDepartment,
         departments: nextDepartments,
+        staffAssignments: Object.fromEntries(nextDepartments.map((office) => [office, prev.staffAssignments[office]])),
         purposeSelection: nextPurpose,
         customPurpose: nextPurpose === "Other" ? prev.customPurpose : "",
         preferredTime: timeStillEnabled ? prev.preferredTime : appointmentTimeOptions[0] || null,
@@ -1297,7 +1310,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     // Keep an open visitor dashboard current while an admin processes the visit.
     // This is in-app live refresh; native background push requires a separately
     // configured Expo/FCM notification service.
-    const activeVisitorId = visitor?._id;
+    const activeVisitorId = currentUser?._id;
     if (!activeVisitorId) return undefined;
 
     const refreshTimer = setInterval(() => {
@@ -1305,7 +1318,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     }, 15000);
 
     return () => clearInterval(refreshTimer);
-  }, [visitor?._id, visitor?.status, visitor?.approvalStatus, visitor?.appointmentStatus]);
+  }, [currentUser?._id, visitor?._id, visitor?.status, visitor?.approvalStatus, visitor?.appointmentStatus]);
 
   useEffect(() => () => {
     if (appointmentTransitionTimeoutRef.current) {
@@ -1546,103 +1559,21 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   };
 
   const maybeShowVisitorWarning = async (activeUser = currentUser) => {
-    if (!activeUser?._id || String(activeUser?.role || "").toLowerCase() !== "visitor") {
-      return;
-    }
-
-    if (visitorWarningCheckInFlightRef.current) {
-      return;
-    }
-
+    if (!activeUser?._id || visitorWarningCheckInFlightRef.current) return;
     visitorWarningCheckInFlightRef.current = true;
-
     try {
-      const response = await ApiService.getNotifications({ read: "false", limit: 10 });
-      const unreadNotifications = Array.isArray(response?.notifications) ? response.notifications : [];
-      const latestNotice = unreadNotifications.find((notification) => {
-        const notificationId = String(notification?._id || "");
-        const notificationType = String(notification?.type || "").toLowerCase();
-        const severity = String(notification?.severity || "").toLowerCase();
-        const notificationText = `${notification?.title || ""} ${notification?.message || ""}`.toLowerCase();
-        const activityType = String(notification?.metadata?.activityType || "").toLowerCase();
-        const isApprovalNotice = [
-          "visitor_registration_approved",
-          "staff_approved_appointment",
-        ].includes(activityType);
-
-        return (
-          notificationId &&
-          !shownVisitorWarningIdsRef.current.has(notificationId) &&
-          (
-            notificationType === "warning" ||
-            notificationType === "alert" ||
-            severity === "high" ||
-            notificationText.includes("reported") ||
-            activityType === "office_correct_location" ||
-            activityType === "visitor_destination_redirected" ||
-            isApprovalNotice
-          )
-        );
-      });
-
-      if (!latestNotice?._id) {
-        return;
-      }
-
-      const noticeId = String(latestNotice._id);
-      shownVisitorWarningIdsRef.current.add(noticeId);
-      const noticeSeverity = String(latestNotice?.severity || latestNotice?.type || "warning").toLowerCase();
-      const activityType = String(latestNotice?.metadata?.activityType || "").toLowerCase();
-      const isApprovalNotice = [
-        "visitor_registration_approved",
-        "staff_approved_appointment",
-      ].includes(activityType);
-      const isWarningNotice =
-        noticeSeverity === "warning" ||
-        noticeSeverity === "high" ||
-        String(latestNotice?.type || "").toLowerCase() === "alert" ||
-        activityType === "office_wrong_location";
-
-      if (Platform.OS !== "web" && (isWarningNotice || isApprovalNotice)) {
-        if (isWarningNotice) Vibration.vibrate([0, 120, 80, 120]);
-        Haptics.notificationAsync(
-          isWarningNotice
-            ? Haptics.NotificationFeedbackType.Warning
-            : Haptics.NotificationFeedbackType.Success,
-        ).catch((error) => {
-          console.log("Visitor warning haptic error:", error);
-        });
-      }
-
-      if (isWarningNotice) {
-        setVisitorWarningNotice({
-          id: noticeId,
-          title: latestNotice.title || "Security Report Warning",
-          message: latestNotice.message || "A new notice has been added to your visitor account.",
-          severity: noticeSeverity || "warning",
-          createdAt: latestNotice.createdAt || latestNotice.timestamp || new Date().toISOString(),
-        });
-      } else {
-        showVisitorPushNotice({
-          title: latestNotice.title || (isApprovalNotice ? "Visit Approved" : "Location Updated"),
-          message:
-            latestNotice.message ||
-            (isApprovalNotice
-              ? "Your appointment has been approved."
-              : "Your visitor route has been updated."),
-          type: isApprovalNotice ? "success" : "info",
-        });
-        ApiService.markNotificationAsRead(noticeId).catch((error) => {
-          console.error("Mark visitor location notice as read error:", error);
-        });
-      }
-    } catch (error) {
-      console.error("Load visitor warning error:", error);
-    } finally {
-      visitorWarningCheckInFlightRef.current = false;
-    }
+      const response = await ApiService.getNotifications({ read: "false", limit: 100 });
+      const notice = (response.notifications || []).find((item) =>
+        !shownVisitorWarningIdsRef.current.has(String(item._id)) &&
+        (["warning", "alert"].includes(item.type) || item.severity === "high"),
+      );
+      if (!notice || String((await ApiService.getCurrentUser())?._id) !== String(activeUser._id)) return;
+      shownVisitorWarningIdsRef.current.add(String(notice._id));
+      setVisitorWarningNotice({ ...notice, id: String(notice._id) });
+      if (Platform.OS !== "web") Vibration.vibrate([0, 120, 80, 120]);
+    } catch { /* The shared inbox and the next refresh can retry. */ }
+    finally { visitorWarningCheckInFlightRef.current = false; }
   };
-
   const dismissVisitorWarningNotice = async () => {
     const warningId = visitorWarningNotice?.id;
     setVisitorWarningNotice(null);
@@ -2413,33 +2344,27 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
 
   const getSelectedAppointmentDepartmentsLabel = () => {
     const selectedDepartments = getSelectedAppointmentDepartments();
-    if (!selectedDepartments.length) return "Select office(s) to visit";
-    if (selectedDepartments.length === 1) return selectedDepartments[0];
+    if (!selectedDepartments.length) return "Select staff to visit";
+    if (selectedDepartments.length === 1) {
+      const staff = activeAppointmentStaffOptions.find((item) => item.id === appointmentForm.staffAssignments?.[selectedDepartments[0]]);
+      return staff ? `${staff.name} — ${staff.department}` : "Select staff to visit";
+    }
     return `${selectedDepartments.length} offices selected`;
   };
 
-  const toggleAppointmentDepartment = (department) => {
+  const toggleAppointmentDepartment = (staff) => {
     setHasAppointmentDraft(true);
     setAppointmentForm((prev) => {
-      const selectedDepartments = Array.isArray(prev.departments)
-        ? prev.departments
-        : prev.department
-          ? [prev.department]
-          : [];
-      const exists = selectedDepartments.includes(department);
-      const nextDepartments = exists
-        ? selectedDepartments.filter((item) => item !== department)
-        : [...selectedDepartments, department];
-
-      return {
-        ...prev,
-        departments: nextDepartments,
-        department: nextDepartments[0] || "",
-      };
+      const staffAssignments = { ...prev.staffAssignments };
+      if (staffAssignments[staff.department] === staff.id) delete staffAssignments[staff.department];
+      else staffAssignments[staff.department] = staff.id;
+      const departments = Object.keys(staffAssignments);
+      return { ...prev, staffAssignments, departments, department: departments[0] || "", preferredTime: null };
     });
   };
 
   const loadAppointmentAvailability = async () => {
+    const requestId = ++availabilityRequestRef.current;
     const date = getValidDate(appointmentForm.preferredDate);
     const selectedDepartments = getSelectedAppointmentDepartments();
     const isViewingAppointmentRequest =
@@ -2447,24 +2372,28 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
 
     if (!isViewingAppointmentRequest || !date || !selectedDepartments.length) {
       setAppointmentAvailability(null);
+      setIsLoadingAppointmentSlots(false);
       return;
     }
 
     setIsLoadingAppointmentSlots(true);
+    setAppointmentAvailability(null);
     try {
       const response = await ApiService.getAppointmentAvailability({
         date: date.toISOString(),
         departments: selectedDepartments,
+        staffAssignments: appointmentForm.staffAssignments || {},
       });
+      if (requestId !== availabilityRequestRef.current) return;
       if (response?.success) {
         setAppointmentAvailability(response);
       } else {
         setAppointmentAvailability(null);
       }
     } catch (error) {
-      setAppointmentAvailability(null);
+      if (requestId === availabilityRequestRef.current) setAppointmentAvailability(null);
     } finally {
-      setIsLoadingAppointmentSlots(false);
+      if (requestId === availabilityRequestRef.current) setIsLoadingAppointmentSlots(false);
     }
   };
 
@@ -3225,6 +3154,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     appointmentForm.preferredDate,
     appointmentForm.department,
     appointmentForm.departments,
+    appointmentForm.staffAssignments,
   ]);
 
   const handleRequestAppointment = async () => {
@@ -3339,6 +3269,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         customPurposeOfVisit: isOtherPurpose ? customPurposeOfVisit : "",
         department,
         departments: selectedDepartments,
+        staffAssignments: appointmentForm.staffAssignments || {},
         officeToVisit: department,
         assignedOffice: department,
         appointmentDepartment: department,
@@ -6094,13 +6025,14 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
 
           <View style={appointmentFormRowResponsiveStyle}>
           <View style={[visitorDashboardStyles.appointmentField, appointmentFormColumnResponsiveStyle]}>
-            <Text style={[visitorDashboardStyles.appointmentFieldLabel, isVisitorDarkMode && visitorDashboardStyles.darkKickerText]}>Office to Visit</Text>
+            <Text style={[visitorDashboardStyles.appointmentFieldLabel, isVisitorDarkMode && visitorDashboardStyles.darkKickerText]}>Staff to Visit</Text>
             <TouchableOpacity
               style={[visitorDashboardStyles.appointmentPickerField, isVisitorDarkMode && visitorDashboardStyles.darkFormControl]}
               onPress={() => {
                 const shouldOpenDepartmentDropdown = !showDepartmentDropdown;
                 closeAppointmentPopovers();
                 setShowDepartmentDropdown(shouldOpenDepartmentDropdown);
+                if (shouldOpenDepartmentDropdown) loadManagedAppointmentOptions();
               }}
               activeOpacity={0.85}
             >
@@ -6109,7 +6041,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
                   <Ionicons name="business-outline" size={18} color="#0A3D91" />
                 </View>
                 <View>
-                  <Text style={[visitorDashboardStyles.appointmentPickerLabel, isVisitorDarkMode && visitorDashboardStyles.darkKickerText]}>Choose an office</Text>
+                  <Text style={[visitorDashboardStyles.appointmentPickerLabel, isVisitorDarkMode && visitorDashboardStyles.darkKickerText]}>Choose a staff member</Text>
                   <Text style={[visitorDashboardStyles.appointmentPickerValue, isVisitorDarkMode && visitorDashboardStyles.darkPrimaryText]}>
                     {getSelectedAppointmentDepartmentsLabel()}
                   </Text>
@@ -6124,11 +6056,12 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
 
             {showDepartmentDropdown ? (
               <View style={[visitorDashboardStyles.purposeDropdownMenu, isVisitorDarkMode && visitorDashboardStyles.darkDropdownMenu]}>
-                {activeAppointmentDepartmentOptions.map((option) => {
-                  const isSelected = getSelectedAppointmentDepartments().includes(option);
+                {!activeAppointmentStaffOptions.length && <TouchableOpacity onPress={loadManagedAppointmentOptions} style={{ padding: 16 }}><Text>{staffDirectoryError || "No active staff available. Tap to refresh."}</Text></TouchableOpacity>}
+                {activeAppointmentStaffOptions.map((option) => {
+                  const isSelected = appointmentForm.staffAssignments?.[option.department] === option.id;
                   return (
                     <TouchableOpacity
-                      key={option}
+                      key={option.id}
                       style={[
                         visitorDashboardStyles.purposeOptionItem,
                         isVisitorDarkMode && visitorDashboardStyles.darkOptionItem,
@@ -6155,7 +6088,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
                             isSelected && visitorDashboardStyles.purposeOptionTextActive,
                           ]}
                         >
-                          {option}
+                          {option.name} — {option.department}{option.position ? ` (${option.position})` : ""}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -6164,7 +6097,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
               </View>
             ) : null}
             <Text style={[visitorDashboardStyles.appointmentAutoHint, isVisitorDarkMode && visitorDashboardStyles.darkMutedText]}>
-              Choose one or more offices. Each time slot follows the capacity set by admin.
+              Choose one active staff member per office. Each request goes to the person you select.
             </Text>
           </View>
 

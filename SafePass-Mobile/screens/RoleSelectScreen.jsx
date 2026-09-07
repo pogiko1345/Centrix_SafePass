@@ -1,3 +1,4 @@
+import { WEB_VERSION_LABEL } from "../utils/webBranding";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -58,9 +59,9 @@ const metrics = [
 ];
 
 const accessPreviewItems = [
-  { label: "Visitor Pass", value: "Ready", icon: "qr-code-outline", accent: brandColors.success },
-  { label: "Gate Scan", value: "Online", icon: "radio-outline", accent: brandColors.sky },
-  { label: "Security Desk", value: "Live", icon: "shield-checkmark-outline", accent: brandColors.blue },
+  { label: "Visitor Pass", value: "Preview", icon: "qr-code-outline", accent: brandColors.success },
+  { label: "Gate Scan", value: "Preview", icon: "radio-outline", accent: brandColors.sky },
+  { label: "Security Desk", value: "Preview", icon: "shield-checkmark-outline", accent: brandColors.blue },
 ];
 
 export default function RoleSelectScreen({ navigation, route }) {
@@ -124,6 +125,10 @@ export default function RoleSelectScreen({ navigation, route }) {
   }, [navigation, route?.params?.returnJourneySplash, route?.params?.skipArrivalSplash]);
 
   useEffect(() => {
+    if (isWeb) {
+      [screenEnterAnim, heroAnim, heroEyebrowAnim, heroTitleAnim, heroBodyAnim, heroVisualIntroAnim, mobileFeatureAnim, mobileVisitorAnim, desktopFeatureAnim, footerAnim].forEach(value => value.setValue(1));
+      return;
+    }
     Animated.parallel([
       Animated.timing(screenEnterAnim, {
         toValue: 1,
@@ -814,7 +819,7 @@ export default function RoleSelectScreen({ navigation, route }) {
 
           <Animated.View style={[roleSelectStyles.mobileFooter, footerEntranceStyle]}>
             <SocialDock links={socialLinks} />
-            <Text style={roleSelectStyles.mobileVersionText}>SafePass Smart Campus v2.1.0</Text>
+            <Text style={roleSelectStyles.mobileVersionText}>{WEB_VERSION_LABEL}</Text>
           </Animated.View>
         </Animated.ScrollView>
         {introVisible ? (
@@ -1003,21 +1008,21 @@ export default function RoleSelectScreen({ navigation, route }) {
                     <Image source={Logo} style={roleSelectStyles.schoolLogo} resizeMode="contain" />
                     <View style={roleSelectStyles.schoolCardBadge}>
                       <Ionicons name="checkmark-circle" size={14} color={brandColors.success} />
-                      <Text style={roleSelectStyles.schoolCardBadgeText}>Active</Text>
+                      <Text style={roleSelectStyles.schoolCardBadgeText}>Preview</Text>
                     </View>
                   </View>
                   <Text style={roleSelectStyles.schoolCardLabel}>Sapphire International Aviation Academy</Text>
-                  <Text style={roleSelectStyles.schoolCardTitle}>Smart campus access is ready</Text>
+                  <Text style={roleSelectStyles.schoolCardTitle}>Explore campus access</Text>
                   <View style={roleSelectStyles.schoolCardDivider} />
                   <View style={roleSelectStyles.statusRow}>
                     <View style={roleSelectStyles.statusDot} />
-                    <Text style={roleSelectStyles.statusText}>Server-connected campus workflow</Text>
+                    <Text style={roleSelectStyles.statusText}>Illustration of campus features</Text>
                   </View>
                 </View>
 
                 <View style={roleSelectStyles.accessPreviewCard}>
                   <View style={roleSelectStyles.accessPreviewHeader}>
-                    <Text style={roleSelectStyles.accessPreviewEyebrow}>Live Access Preview</Text>
+                    <Text style={roleSelectStyles.accessPreviewEyebrow}>Campus Access Preview</Text>
                     <Ionicons name="pulse-outline" size={18} color="#D8E8FF" />
                   </View>
                   <View style={roleSelectStyles.accessPreviewGrid}>
@@ -1146,7 +1151,7 @@ export default function RoleSelectScreen({ navigation, route }) {
 
         <View style={roleSelectStyles.socialWrap}>
           <SocialDock links={socialLinks} />
-          <Text style={roleSelectStyles.versionText}>SafePass Smart Campus v2.1.0</Text>
+          <Text style={roleSelectStyles.versionText}>{WEB_VERSION_LABEL}</Text>
         </View>
       </Animated.ScrollView>
       {introVisible ? (

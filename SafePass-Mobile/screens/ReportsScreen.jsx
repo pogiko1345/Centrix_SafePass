@@ -1,7 +1,7 @@
+import Alert from '../utils/Alert';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   RefreshControl,
   ScrollView,

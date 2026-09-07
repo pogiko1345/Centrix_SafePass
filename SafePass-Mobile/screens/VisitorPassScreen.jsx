@@ -1,3 +1,4 @@
+import Alert from '../utils/Alert';
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -11,7 +12,6 @@ import {
   Animated,
   StatusBar,
   Share,
-  Alert,
   Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";

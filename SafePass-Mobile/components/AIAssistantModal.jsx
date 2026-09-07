@@ -1,3 +1,4 @@
+import Alert from '../utils/Alert';
 // components/AIAssistantModal.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -9,9 +10,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Animated,
-  Alert,
   Platform,
-} from 'react-native';
+} from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AIService from '../utils/AIService';

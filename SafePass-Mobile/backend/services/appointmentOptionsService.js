@@ -1,4 +1,5 @@
 const AppSettings = require("../models/AppSettings");
+const { getStaffDirectory } = require("./staffDirectoryService");
 const {
   DEFAULT_SYSTEM_SETTINGS,
   sanitizeAppointmentOptions,
@@ -16,8 +17,10 @@ const getAppointmentOptions = async ({ activeOnly = false } = {}) => {
   const options = sanitizeAppointmentOptions(settingsRecord?.appointmentOptions || {});
   if (!activeOnly) return options;
 
+  const directory = await getStaffDirectory(options.offices);
   return {
-    offices: options.offices.filter((option) => !option.deleted && option.enabled !== false),
+    offices: directory.offices,
+    staff: directory.staff,
     purposes: options.purposes.filter((option) => !option.deleted && option.enabled !== false),
     timeSlots: options.timeSlots.filter((slot) => !slot.deleted && slot.enabled !== false),
   };

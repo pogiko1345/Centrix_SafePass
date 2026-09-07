@@ -1,3 +1,4 @@
+import Alert from '../utils/Alert';
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
@@ -8,7 +9,6 @@ import {
   RefreshControl,
   Modal,
   TextInput,
-  Alert,
   Image,
   Platform,
   Animated,

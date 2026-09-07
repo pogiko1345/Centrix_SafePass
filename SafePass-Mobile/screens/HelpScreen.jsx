@@ -1,3 +1,4 @@
+import Alert from '../utils/Alert';
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -8,7 +9,6 @@ import {
   StatusBar,
   Linking,
   Platform,
-  Alert,
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
