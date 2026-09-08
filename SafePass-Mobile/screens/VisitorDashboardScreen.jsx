@@ -713,6 +713,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const dashboardScrollRef = useRef(null);
   const phoneLocationSubscriptionRef = useRef(null);
   const appointmentTransitionTimeoutRef = useRef(null);
+  const appointmentSubmitInFlightRef = useRef(false);
   const visitorTabTransitionTimeoutRef = useRef(null);
   const visitorPushNoticeTimeoutRef = useRef(null);
   const appointmentWebDateInputRef = useRef(null);
@@ -3180,6 +3181,8 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   ]);
 
   const handleRequestAppointment = async () => {
+    if (appointmentSubmitInFlightRef.current) return;
+
     const preferredDate = appointmentForm.preferredDate;
     const preferredTime = appointmentForm.preferredTime;
     const isOtherPurpose = appointmentForm.purposeSelection === "Other";
@@ -3281,6 +3284,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       return;
     }
 
+    appointmentSubmitInFlightRef.current = true;
     setIsSubmittingAppointment(true);
     const submittedAt = new Date();
     try {
@@ -3338,7 +3342,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           title: afterHoursNotice?.title || "Appointment Submitted Successfully",
           message: feedbackMessage,
           date: formatDate(preferredDate),
-          time: formatTime(preferredTime),
+          time: formatAppointmentSlotTime(preferredTime),
           department: selectedDepartments.join(", "),
           purpose: purposeOfVisit,
         });
@@ -3356,6 +3360,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       console.error("Request appointment error:", error);
       showVisitorAlert("Request Failed", error?.message || "Failed to send your appointment request.");
     } finally {
+      appointmentSubmitInFlightRef.current = false;
       setIsSubmittingAppointment(false);
     }
   };

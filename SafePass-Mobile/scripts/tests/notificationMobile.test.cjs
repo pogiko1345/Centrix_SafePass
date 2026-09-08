@@ -146,6 +146,37 @@ test('new appointment requests require a fresh time and format slots as wall-clo
   assert.match(source, /const buildAppointmentForm[\s\S]*?preferredTime:\s*null/);
   assert.match(source, /const formatAppointmentSlotTime[\s\S]*?toLocaleTimeString/);
   assert.match(source, /\{formatAppointmentSlotTime\(option\)\}/);
+  assert.match(source, /time:\s*formatAppointmentSlotTime\(preferredTime\)/);
+});
+
+test('appointment submission has a synchronous duplicate-request guard', () => {
+  const source = fs.readFileSync(path.join(root, 'screens/VisitorDashboardScreen.jsx'), 'utf8');
+  assert.match(source, /const appointmentSubmitInFlightRef = useRef\(false\)/);
+  assert.match(source, /const handleRequestAppointment[\s\S]*?if \(appointmentSubmitInFlightRef\.current\) return/);
+  assert.match(source, /appointmentSubmitInFlightRef\.current = true[\s\S]*?finally \{[\s\S]*?appointmentSubmitInFlightRef\.current = false/);
+});
+
+test('multi-department approvals do not collide as duplicate appointments', () => {
+  const source = fs.readFileSync(path.join(root, 'backend/server.js'), 'utf8');
+  let expression;
+  traverse(parser.parse(source, { sourceType: 'script' }), { VariableDeclarator(p) {
+    if (p.node.id.name === 'getApprovedAppointmentDuplicateKey') expression = source.slice(p.node.init.start, p.node.init.end);
+  } });
+  assert.ok(expression);
+  const getKey = vm.runInNewContext(`(${expression})`, {
+    normalizeAppointmentDuplicateText: value => String(value || '').trim().toLowerCase(),
+    normalizeDepartmentValue: value => String(value || '').trim().toLowerCase().replace("registrar's office", 'registrar'),
+    getAppointmentDuplicateDayKey: () => '2026-09-09',
+  });
+  const base = { email: 'visitor@example.com', purposeOfVisit: 'Enrollment', visitDate: new Date() };
+  assert.notEqual(
+    getKey({ ...base, appointmentDepartment: 'Registrar' }),
+    getKey({ ...base, appointmentDepartment: 'Accounting' }),
+  );
+  assert.equal(
+    getKey({ ...base, appointmentDepartment: 'Registrar' }),
+    getKey({ ...base, appointmentDepartment: "Registrar's Office" }),
+  );
 });
 
 test('backend selected staff lookup enforces exact ID, active status, role and office', async () => {

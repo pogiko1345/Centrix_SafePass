@@ -4949,9 +4949,12 @@ const getApprovedAppointmentDuplicateKey = (visitor = {}) => {
   const purpose = normalizeAppointmentDuplicateText(
     visitor.purposeOfVisit || visitor.customPurposeOfVisit || visitor.purposeCategory,
   );
+  const department = normalizeDepartmentValue(
+    visitor.appointmentDepartment || visitor.assignedOffice || visitor.host,
+  );
   const day = getAppointmentDuplicateDayKey(visitor.visitDate);
-  if (!email || !purpose || !day) return "";
-  return `${email}|${purpose}|${day}`;
+  if (!email || !purpose || !department || !day) return "";
+  return `${email}|${purpose}|${department}|${day}`;
 };
 
 const closeDuplicateApprovedAppointments = async (approvedVisitor) => {
