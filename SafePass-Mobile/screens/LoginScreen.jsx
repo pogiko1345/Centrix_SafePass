@@ -40,6 +40,10 @@ import {
 } from "../utils/appVariant";
 import Logo from "../assets/LogoSapphire.jpg";
 
+// Temporarily keep unfinished authentication options out of the production UI.
+const GOOGLE_SIGN_IN_ENABLED = false;
+const TRUST_DEVICE_ENABLED = false;
+
 const isWeb = Platform.OS === "web";
 const Storage = Platform.OS === "web"
   ? require("../utils/webStorage").default
@@ -2147,7 +2151,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
 
                   {/* Remember Me & Forgot Password */}
                   <View style={[loginStyles.row, authRowResponsiveStyle]}>
-                    <TouchableOpacity 
+                    {TRUST_DEVICE_ENABLED ? <TouchableOpacity 
                       style={loginStyles.rememberBox}
                       onPress={() => setRememberMe(!rememberMe)}
                       activeOpacity={0.7}
@@ -2164,7 +2168,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                           Skip extra verification on this device when allowed.
                         </Text>
                       </View>
-                    </TouchableOpacity>
+                    </TouchableOpacity> : null}
                     
                     <TouchableOpacity onPress={handleForgotPassword}>
                       <Text style={loginStyles.forgotText}>Forgot Password?</Text>
@@ -2251,7 +2255,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                     </TouchableOpacity>
                   </Animated.View>
 
-                  <View style={{ marginTop: 16, marginBottom: 16 }}>
+                  {GOOGLE_SIGN_IN_ENABLED ? <View style={{ marginTop: 16, marginBottom: 16 }}>
                     <Text style={{ textAlign: "center", color: brandColors.textMuted, fontSize: 12, fontWeight: "700", marginBottom: 10 }}>
                       OR SIGN IN WITH A CONNECTED ACCOUNT
                     </Text>
@@ -2298,7 +2302,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                     <Text style={{ textAlign: "center", color: brandColors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 9 }}>
                       Only accounts already connected to SafePass can use this option.
                     </Text>
-                  </View>
+                  </View> : null}
 
                   {/* 2FA Info */}
                   <View style={loginStyles.twoFactorInfo}>

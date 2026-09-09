@@ -25,6 +25,8 @@ import * as ImagePicker from "expo-image-picker";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import useGoogleSignIn from "../utils/useGoogleSignIn";
+
+const GOOGLE_SIGN_IN_ENABLED = false;
 import ApiService from "../utils/ApiService";
 import {
   PHILIPPINE_MOBILE_NUMBER_MESSAGE,
@@ -564,19 +566,8 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
 
   const showLanguagePicker = () => {
     if (Platform.OS === "web") {
-      const nextLanguage = globalThis?.window?.prompt?.(
-        `Choose language: ${LANGUAGES.join(" or ")}`,
-        selectedLanguage,
-      );
-      if (!nextLanguage) return;
-      const match = LANGUAGES.find(
-        (language) => language.toLowerCase() === nextLanguage.trim().toLowerCase(),
-      );
-      if (match) {
-        setSelectedLanguage(match);
-      } else {
-        Alert.alert("Language Not Available", "Please choose English or Filipino / Tagalog.");
-      }
+      const currentIndex = LANGUAGES.indexOf(selectedLanguage);
+      setSelectedLanguage(LANGUAGES[(currentIndex + 1) % LANGUAGES.length]);
       return;
     }
 
@@ -948,7 +939,7 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
         </View>
       </View>
 
-      <View style={themedCardStyle}>
+      {GOOGLE_SIGN_IN_ENABLED ? <View style={themedCardStyle}>
         <Text style={themedTitleStyle}>Connected Sign-In Accounts</Text>
         <Text style={themedMutedStyle}>
           Connect an account only after signing in with your SafePass password. Connected accounts can use faster sign-in later.
@@ -963,7 +954,7 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
             <Text style={styles.secondaryBtnText}>{currentProfile.googleId ? "Google connected" : "Connect Google"}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </View> : null}
 
       <View style={[styles.securityNoteCard, isDarkProfile && styles.darkInfoCard]}>
         <Ionicons name="shield-checkmark-outline" size={22} color="#0A3D91" />
@@ -1078,7 +1069,10 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
                   <TouchableOpacity style={[styles.webIconButton, isDarkProfile && styles.darkSecondaryBtn]} onPress={loadProfile}>
                     <Ionicons name="refresh-outline" size={18} color={isDarkProfile ? "#F8FAFC" : "#0F172A"} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.webEditButton} onPress={() => setEditMode(true)}>
+                  <TouchableOpacity style={styles.webEditButton} onPress={() => {
+                    setTab("account");
+                    setEditMode(true);
+                  }}>
                     <Text style={styles.webEditButtonText}>Edit</Text>
                     <Ionicons name="create-outline" size={15} color="#FFFFFF" />
                   </TouchableOpacity>
@@ -1148,7 +1142,10 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
                         ) : null}
                         <TouchableOpacity
                           style={[styles.editBtn, !isDesktop && styles.mobileEditIconBtn]}
-                          onPress={() => setEditMode(true)}
+                          onPress={() => {
+                            setTab("account");
+                            setEditMode(true);
+                          }}
                         >
                           <Ionicons
                             name="create-outline"

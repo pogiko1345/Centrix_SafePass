@@ -31,6 +31,8 @@ import { useAviationTransition } from "../utils/AviationTransitionContext";
 import { makeRedirectUri } from "expo-auth-session";
 import useGoogleSignIn from "../utils/useGoogleSignIn";
 
+const GOOGLE_SIGN_IN_ENABLED = false;
+
 const VISITOR_SOCIAL_SIGNUP_REDIRECT_URI =
   Platform.OS === "web" ? makeRedirectUri() : undefined;
 
@@ -1656,7 +1658,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
 
               {isDesktopRegister || isSimpleRegister ? null : renderStepInsights()}
 
-              <View style={{ marginTop: 12, marginBottom: 2, padding: isCompactRegister ? 10 : 11, borderWidth: 1, borderColor: "#D8E6F8", borderRadius: 10, backgroundColor: "#F8FBFF" }}>
+              {GOOGLE_SIGN_IN_ENABLED ? <View style={{ marginTop: 12, marginBottom: 2, padding: isCompactRegister ? 10 : 11, borderWidth: 1, borderColor: "#D8E6F8", borderRadius: 10, backgroundColor: "#F8FBFF" }}>
                 <Text style={{ textAlign: "center", color: "#334155", fontSize: 11, fontWeight: "800", marginBottom: 3 }}>
                   FASTER VISITOR SIGN-UP
                 </Text>
@@ -1711,7 +1713,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
                     ) : null}
                   </View>
                 ) : null}
-              </View>
+              </View> : null}
 
               <View style={visitorRegisterStyles.formNoticeCard}>
                 <View style={visitorRegisterStyles.formNoticeIcon}>

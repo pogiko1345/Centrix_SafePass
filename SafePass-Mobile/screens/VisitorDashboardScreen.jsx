@@ -600,6 +600,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const [selectedVisitorSection, setSelectedVisitorSection] = useState("home");
   const [selectedAppointmentScreen, setSelectedAppointmentScreen] = useState("menu");
   const [selectedVisitorMapFloor, setSelectedVisitorMapFloor] = useState("ground");
+  const [visitorMapResetKey, setVisitorMapResetKey] = useState(0);
   const [visitorMapRooms, setVisitorMapRooms] = useState(MONITORING_MAP_OFFICES);
   const [visitorMapRoomPositions, setVisitorMapRoomPositions] = useState(MONITORING_MAP_OFFICE_POSITIONS);
   const visitorScreenRestoreReadyRef = useRef(false);
@@ -6722,6 +6723,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
 
   const renderVisitorCampusMap = ({ fullscreen = false } = {}) => (
     <CampusMap
+      key={`visitor-map-${visitorMapResetKey}-${fullscreen ? "fullscreen" : "inline"}`}
       visitors={visitorSelfLocationMarker ? [visitorSelfLocationMarker] : []}
       floors={MONITORING_MAP_FLOORS}
       offices={visitorMapRooms}
@@ -6891,7 +6893,10 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         </AnimatedPressable>
         <AnimatedPressable
           style={[visitorDashboardStyles.visitorMapActionButton, isVisitorDarkMode && visitorDashboardStyles.darkActionButton]}
-          onPress={() => setSelectedVisitorMapFloor("ground")}
+          onPress={() => {
+            setSelectedVisitorMapFloor(visitorDestinationInfo.floorId || "ground");
+            setVisitorMapResetKey((current) => current + 1);
+          }}
           activeOpacity={0.88}
         >
           <Ionicons name="refresh-outline" size={17} color="#0A3D91" />
@@ -6899,7 +6904,9 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         </AnimatedPressable>
         <AnimatedPressable
           style={[visitorDashboardStyles.visitorMapActionButton, isVisitorDarkMode && visitorDashboardStyles.darkActionButton]}
-          onPress={openAppointmentRequestScreen}
+          onPress={() => handleVisitorRouteNavigation("WebMapScreen", {
+            destinationOffice: visitorDestinationInfo.officeName,
+          })}
           activeOpacity={0.88}
         >
           <Ionicons name="swap-horizontal-outline" size={17} color="#0A3D91" />
