@@ -1445,12 +1445,6 @@ const corsAllowedOrigins = Array.from(
   ),
 );
 
-const allowDevelopmentOrigins = !(
-  process.env.NODE_ENV === "production" ||
-  process.env.RENDER ||
-  process.env.VERCEL
-);
-
 const isPrivateNetworkDevOrigin = (origin = "") => {
   try {
     const parsedOrigin = new URL(origin);
@@ -1481,26 +1475,16 @@ const corsOptions = {
     const normalizedOrigin = String(origin || "").replace(/\/$/, "");
     if (
       corsAllowedOrigins.includes(normalizedOrigin) ||
-<<<<<<< HEAD
-      (allowDevelopmentOrigins && isPrivateNetworkDevOrigin(normalizedOrigin)) ||
-      isSafePassHostedOrigin(normalizedOrigin)
-=======
       (allowPrivateNetworkDevOrigins && isPrivateNetworkDevOrigin(normalizedOrigin))
->>>>>>> f649f6795016977e265a2d6fe7906dce010a0d08
     ) {
       return callback(null, true);
     }
 
-<<<<<<< HEAD
-    console.warn(`Blocked unlisted CORS origin: ${normalizedOrigin}`);
-    return callback(null, false);
-=======
     console.warn(`Rejected unlisted CORS origin: ${normalizedOrigin}`);
     const corsError = new Error("Origin is not allowed by CORS");
     corsError.code = "CORS_ORIGIN_DENIED";
     corsError.status = 403;
     return callback(corsError);
->>>>>>> f649f6795016977e265a2d6fe7906dce010a0d08
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

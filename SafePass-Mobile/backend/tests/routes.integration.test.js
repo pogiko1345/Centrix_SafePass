@@ -342,7 +342,6 @@ test.beforeEach(() => {
   state.accessLogSaves = [];
 });
 
-<<<<<<< HEAD
 test("API sends security headers and limits browser origins", async () => {
   const allowed = await requestJson("/api/health", {
     headers: { Origin: "https://siaacentrixsafepass.com" },
@@ -359,7 +358,8 @@ test("API sends security headers and limits browser origins", async () => {
     headers: { Origin: "https://untrusted.example" },
   });
   assert.equal(blocked.headers.get("access-control-allow-origin"), null);
-=======
+});
+
 test("CORS allows approved web origins and rejects unknown origins", async () => {
   const allowedResponse = await requestJson("/api/test", {
     headers: { Origin: "https://siaacentrixsafepass.com" },
@@ -418,7 +418,6 @@ test("public health response omits internal configuration and diagnostics", asyn
     Object.keys(response.body).sort(),
     ["service", "status", "success", "timestamp"],
   );
->>>>>>> f649f6795016977e265a2d6fe7906dce010a0d08
 });
 
 test("login returns the same error for unknown users and wrong passwords", async () => {

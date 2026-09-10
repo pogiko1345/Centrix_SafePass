@@ -12,6 +12,7 @@ import AviationSplash from "./components/AviationSplash";
 import NotificationInbox from "./components/NotificationInbox";
 import WebAlertHost from "./components/WebAlertHost";
 import { AviationTransitionContext } from "./utils/AviationTransitionContext";
+import { LoginScreen, RoleSelectScreen } from "./screens/authScreens";
 
 import ApiService from "./utils/ApiService";
 import {
@@ -42,8 +43,6 @@ const logAppDebug = (...args) => {
     console.log(...args);
   }
 };
-const LoginScreen = lazy(() => import("./screens/LoginScreen"));
-const RoleSelectScreen = lazy(() => import("./screens/RoleSelectScreen"));
 const AdminDashboardScreen = lazy(() => import("./screens/AdminDashboardScreen"));
 const SecurityDashboardScreen = lazy(() => import("./screens/SecurityDashboardScreen"));
 const VisitorDashboardScreen = lazy(() => import("./screens/VisitorDashboardScreen"));
