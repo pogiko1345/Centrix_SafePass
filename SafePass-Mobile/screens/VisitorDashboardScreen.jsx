@@ -600,6 +600,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const [selectedVisitorSection, setSelectedVisitorSection] = useState("home");
   const [selectedAppointmentScreen, setSelectedAppointmentScreen] = useState("menu");
   const [selectedVisitorMapFloor, setSelectedVisitorMapFloor] = useState("ground");
+  const [visitorMapResetKey, setVisitorMapResetKey] = useState(0);
   const [visitorMapRooms, setVisitorMapRooms] = useState(MONITORING_MAP_OFFICES);
   const [visitorMapRoomPositions, setVisitorMapRoomPositions] = useState(MONITORING_MAP_OFFICE_POSITIONS);
   const visitorScreenRestoreReadyRef = useRef(false);
@@ -647,6 +648,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const [isCheckOutLoading, setIsCheckOutLoading] = useState(false);
   const [appointmentAvailability, setAppointmentAvailability] = useState(null);
   const availabilityRequestRef = useRef(0);
+  const visitorDataRequestRef = useRef(0);
   const [isLoadingAppointmentSlots, setIsLoadingAppointmentSlots] = useState(false);
   const [staffDirectoryError, setStaffDirectoryError] = useState("");
   const [appointmentOptions, setAppointmentOptions] = useState({
@@ -712,6 +714,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const dashboardScrollRef = useRef(null);
   const phoneLocationSubscriptionRef = useRef(null);
   const appointmentTransitionTimeoutRef = useRef(null);
+  const appointmentSubmitInFlightRef = useRef(false);
   const visitorTabTransitionTimeoutRef = useRef(null);
   const visitorPushNoticeTimeoutRef = useRef(null);
   const appointmentWebDateInputRef = useRef(null);
@@ -1686,11 +1689,13 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   };
 
   const loadVisitorData = async ({ silent = false, force = false } = {}) => {
+    const requestId = ++visitorDataRequestRef.current;
     if (!silent) {
       setIsLoading(true);
     }
     try {
       const currentUser = await ApiService.getCurrentUser();
+      if (requestId !== visitorDataRequestRef.current) return;
       if (!currentUser) {
         navigation.replace("Login");
         return;
@@ -1711,7 +1716,9 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       }
 
       const profileResponse = await ApiService.getVisitorProfileCached();
+      if (requestId !== visitorDataRequestRef.current) return;
       await syncAndroidVirtualNfcToken(profileResponse);
+      if (requestId !== visitorDataRequestRef.current) return;
       const accountSafePassId =
         profileResponse?.account?.nfcCardId ||
         currentUser?.nfcCardId ||
@@ -1778,6 +1785,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       await maybeShowVisitorWarning(currentUser);
       setConnectionIssue(null);
     } catch (error) {
+      if (requestId !== visitorDataRequestRef.current) return;
       if (!isSafePassConnectionError(error)) {
         console.error("Load visitor data error:", error);
       }
@@ -1799,7 +1807,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         showVisitorAlert("Error", "Failed to load visitor data");
       }
     } finally {
-      if (!silent) {
+      if (!silent && requestId === visitorDataRequestRef.current) {
         setIsLoading(false);
       }
     }
@@ -2241,6 +2249,19 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
   };
 
+  // Appointment slots are wall-clock choices, not absolute timestamps. Formatting
+  // them with the app-wide Manila timezone shifts their labels on devices whose
+  // local timezone differs (for example, 7:00 AM appeared as 3:00 PM in UTC).
+  const formatAppointmentSlotTime = (dateValue) => {
+    const date = getValidDate(dateValue);
+    if (!date) return "N/A";
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
   const getDefaultAppointmentDate = () => {
     const visitorDate = getValidDate(visitor?.visitDate);
     if (visitorDate) return getNextAvailableAppointmentDate(visitorDate);
@@ -2560,7 +2581,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const renderMobileAppointmentSlotPicker = () => {
     const selectedDate = getValidDate(appointmentForm.preferredDate) || getDefaultAppointmentDate();
     const selectedTime = getValidDate(appointmentForm.preferredTime);
-    const selectedTimeLabel = selectedTime ? formatTime(selectedTime) : "Select a time";
+    const selectedTimeLabel = selectedTime ? formatAppointmentSlotTime(selectedTime) : "Select a time";
     const selectedDateLabel = selectedDate.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -2665,7 +2686,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
                           isSelected && visitorDashboardStyles.mobileTimeSlotTextSelected,
                         ]}
                       >
-                        {formatTime(option)}
+                      {formatAppointmentSlotTime(option)}
                       </Text>
                       <Text
                         style={[
@@ -2715,7 +2736,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     const selectedTime = getValidDate(appointmentForm.preferredTime);
     const monthDate = getValidDate(webAppointmentCalendarMonth) || selectedDate;
     const selectedLabel = selectedTime
-      ? `${formatTime(selectedTime)}, ${selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+      ? `${formatAppointmentSlotTime(selectedTime)}, ${selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
       : "Select a time";
     const hasDepartments = getSelectedAppointmentDepartments().length > 0;
 
@@ -2820,7 +2841,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
                             isSelected && visitorDashboardStyles.webTimeSlotTextSelected,
                           ]}
                         >
-                          {formatTime(option)}
+                        {formatAppointmentSlotTime(option)}
                         </Text>
                         <Text
                           style={[
@@ -2967,9 +2988,12 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const buildAppointmentForm = (visitorRecord = visitor) => {
     return {
       preferredDate: getDefaultAppointmentDate(),
-      preferredTime: getDefaultAppointmentTime(),
+      // Every new request must make an explicit time choice. Reusing the prior
+      // visit time caused confusing second requests, especially on another device.
+      preferredTime: null,
       department: "",
       departments: [],
+      staffAssignments: {},
       purposeSelection: "",
       customPurpose: "",
       idType: getStoredVisitorIdType(visitorRecord),
@@ -3158,6 +3182,8 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   ]);
 
   const handleRequestAppointment = async () => {
+    if (appointmentSubmitInFlightRef.current) return;
+
     const preferredDate = appointmentForm.preferredDate;
     const preferredTime = appointmentForm.preferredTime;
     const isOtherPurpose = appointmentForm.purposeSelection === "Other";
@@ -3259,6 +3285,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       return;
     }
 
+    appointmentSubmitInFlightRef.current = true;
     setIsSubmittingAppointment(true);
     const submittedAt = new Date();
     try {
@@ -3316,7 +3343,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           title: afterHoursNotice?.title || "Appointment Submitted Successfully",
           message: feedbackMessage,
           date: formatDate(preferredDate),
-          time: formatTime(preferredTime),
+          time: formatAppointmentSlotTime(preferredTime),
           department: selectedDepartments.join(", "),
           purpose: purposeOfVisit,
         });
@@ -3334,6 +3361,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       console.error("Request appointment error:", error);
       showVisitorAlert("Request Failed", error?.message || "Failed to send your appointment request.");
     } finally {
+      appointmentSubmitInFlightRef.current = false;
       setIsSubmittingAppointment(false);
     }
   };
@@ -4704,12 +4732,13 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
 
   const handleEditProfilePress = () => {
     if (visitor) {
+      const fullNameParts = String(visitor.fullName || "").trim().split(/\s+/).filter(Boolean);
       setProfileEditForm({
-        firstName: visitor.firstName || '',
-        lastName: visitor.lastName || '',
-        email: visitor.email || '',
-        phoneNumber: visitor.phoneNumber || '',
-        emergencyContact: visitor.emergencyContact || ''
+        firstName: currentUser?.firstName || visitor.firstName || fullNameParts[0] || '',
+        lastName: currentUser?.lastName || visitor.lastName || fullNameParts.slice(1).join(' ') || '',
+        email: currentUser?.email || visitor.email || '',
+        phoneNumber: currentUser?.phone || visitor.phoneNumber || '',
+        emergencyContact: currentUser?.emergencyContact || visitor.emergencyContact || ''
       });
       setShowProfileEditModal(true);
     }
@@ -4746,7 +4775,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         firstName: profileEditForm.firstName.trim(),
         lastName: profileEditForm.lastName.trim(),
         email: profileEditForm.email.trim().toLowerCase(),
-        phoneNumber: profileEditForm.phoneNumber.trim(),
+        phone: profileEditForm.phoneNumber.trim(),
         emergencyContact: profileEditForm.emergencyContact.trim()
       });
 
@@ -4756,20 +4785,22 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           ...prev,
           firstName: profileEditForm.firstName.trim(),
           lastName: profileEditForm.lastName.trim(),
+          fullName: `${profileEditForm.firstName.trim()} ${profileEditForm.lastName.trim()}`,
           email: profileEditForm.email.trim().toLowerCase(),
           phoneNumber: profileEditForm.phoneNumber.trim(),
           emergencyContact: profileEditForm.emergencyContact.trim()
         }));
 
-        // Update current user in AsyncStorage
-        await AsyncStorage.setItem("currentUser", JSON.stringify({
-          ...JSON.parse(await AsyncStorage.getItem("currentUser") || '{}'),
+        const updatedUser = response.user || {
+          ...(currentUser || {}),
           firstName: profileEditForm.firstName.trim(),
           lastName: profileEditForm.lastName.trim(),
           email: profileEditForm.email.trim().toLowerCase(),
-          phoneNumber: profileEditForm.phoneNumber.trim(),
+          phone: profileEditForm.phoneNumber.trim(),
           emergencyContact: profileEditForm.emergencyContact.trim()
-        }));
+        };
+        setCurrentUser(updatedUser);
+        await Storage.setItem("currentUser", JSON.stringify(updatedUser));
 
         setShowProfileEditModal(false);
         showVisitorAlert("Profile Updated", "Your profile has been updated successfully.");
@@ -6692,6 +6723,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
 
   const renderVisitorCampusMap = ({ fullscreen = false } = {}) => (
     <CampusMap
+      key={`visitor-map-${visitorMapResetKey}-${fullscreen ? "fullscreen" : "inline"}`}
       visitors={visitorSelfLocationMarker ? [visitorSelfLocationMarker] : []}
       floors={MONITORING_MAP_FLOORS}
       offices={visitorMapRooms}
@@ -6861,7 +6893,10 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         </AnimatedPressable>
         <AnimatedPressable
           style={[visitorDashboardStyles.visitorMapActionButton, isVisitorDarkMode && visitorDashboardStyles.darkActionButton]}
-          onPress={() => setSelectedVisitorMapFloor("ground")}
+          onPress={() => {
+            setSelectedVisitorMapFloor(visitorDestinationInfo.floorId || "ground");
+            setVisitorMapResetKey((current) => current + 1);
+          }}
           activeOpacity={0.88}
         >
           <Ionicons name="refresh-outline" size={17} color="#0A3D91" />
@@ -6869,7 +6904,9 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         </AnimatedPressable>
         <AnimatedPressable
           style={[visitorDashboardStyles.visitorMapActionButton, isVisitorDarkMode && visitorDashboardStyles.darkActionButton]}
-          onPress={openAppointmentRequestScreen}
+          onPress={() => handleVisitorRouteNavigation("WebMapScreen", {
+            destinationOffice: visitorDestinationInfo.officeName,
+          })}
           activeOpacity={0.88}
         >
           <Ionicons name="swap-horizontal-outline" size={17} color="#0A3D91" />
@@ -8151,6 +8188,8 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           </View>
         </View>
       </Modal>
+
+      {renderProfileEditModal()}
 
       <Modal
         visible={showCheckOutModal}

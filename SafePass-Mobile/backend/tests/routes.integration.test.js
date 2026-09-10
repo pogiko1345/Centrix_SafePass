@@ -342,6 +342,7 @@ test.beforeEach(() => {
   state.accessLogSaves = [];
 });
 
+<<<<<<< HEAD
 test("API sends security headers and limits browser origins", async () => {
   const allowed = await requestJson("/api/health", {
     headers: { Origin: "https://siaacentrixsafepass.com" },
@@ -358,6 +359,66 @@ test("API sends security headers and limits browser origins", async () => {
     headers: { Origin: "https://untrusted.example" },
   });
   assert.equal(blocked.headers.get("access-control-allow-origin"), null);
+=======
+test("CORS allows approved web origins and rejects unknown origins", async () => {
+  const allowedResponse = await requestJson("/api/test", {
+    headers: { Origin: "https://siaacentrixsafepass.com" },
+  });
+  const localDevelopmentResponse = await requestJson("/api/test", {
+    headers: { Origin: "http://192.168.1.25:19006" },
+  });
+  const rejectedResponse = await requestJson("/api/test", {
+    headers: { Origin: "https://malicious.example" },
+  });
+  const unconfiguredPreviewResponse = await requestJson("/api/test", {
+    headers: { Origin: "https://safepass-untrusted-preview.vercel.app" },
+  });
+
+  assert.equal(allowedResponse.status, 200);
+  assert.equal(
+    allowedResponse.headers.get("access-control-allow-origin"),
+    "https://siaacentrixsafepass.com",
+  );
+  assert.equal(localDevelopmentResponse.status, 200);
+  assert.equal(
+    localDevelopmentResponse.headers.get("access-control-allow-origin"),
+    "http://192.168.1.25:19006",
+  );
+  assert.equal(rejectedResponse.status, 403);
+  assert.equal(rejectedResponse.headers.get("access-control-allow-origin"), null);
+  assert.equal(rejectedResponse.body.error, "Origin is not allowed");
+  assert.equal(unconfiguredPreviewResponse.status, 403);
+});
+
+test("request limits reject oversized ordinary JSON but allow image-route parsing", async () => {
+  const oversizedValue = "x".repeat(1024 * 1024 + 1);
+  const ordinaryResponse = await requestJson("/api/login", {
+    method: "POST",
+    body: { email: "large@example.com", password: oversizedValue },
+  });
+  const imageRouteResponse = await requestJson("/api/appointments/id-ocr/validate", {
+    method: "POST",
+    body: { idType: "School ID", imageUri: oversizedValue },
+  });
+
+  assert.equal(ordinaryResponse.status, 413);
+  assert.equal(ordinaryResponse.body.error, "Request body is too large");
+  assert.equal(imageRouteResponse.status, 401);
+});
+
+test("public health response omits internal configuration and diagnostics", async () => {
+  const response = await requestJson("/api/health");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.status, "OK");
+  assert.equal(response.body.success, true);
+  assert.equal(response.body.service, "SafePass API");
+  assert.equal(typeof response.body.timestamp, "string");
+  assert.deepEqual(
+    Object.keys(response.body).sort(),
+    ["service", "status", "success", "timestamp"],
+  );
+>>>>>>> f649f6795016977e265a2d6fe7906dce010a0d08
 });
 
 test("login returns the same error for unknown users and wrong passwords", async () => {

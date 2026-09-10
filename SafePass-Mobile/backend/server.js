@@ -1467,24 +1467,10 @@ const isPrivateNetworkDevOrigin = (origin = "") => {
   }
 };
 
-const isSafePassHostedOrigin = (origin = "") => {
-  try {
-    const parsedOrigin = new URL(origin);
-    const hostname = parsedOrigin.hostname.toLowerCase();
-
-    return (
-      hostname === "sapphiresafepass2.vercel.app" ||
-      hostname === "siaacentrixsafepass.com" ||
-      hostname === "www.siaacentrixsafepass.com" ||
-      (
-        hostname.endsWith(".vercel.app") &&
-        (hostname.startsWith("safepass") || hostname.startsWith("sapphire"))
-      )
-    );
-  } catch {
-    return false;
-  }
-};
+const allowPrivateNetworkDevOrigins =
+  process.env.NODE_ENV !== "production" &&
+  !process.env.RENDER &&
+  !process.env.VERCEL;
 
 const corsOptions = {
   origin(origin, callback) {
@@ -1495,14 +1481,26 @@ const corsOptions = {
     const normalizedOrigin = String(origin || "").replace(/\/$/, "");
     if (
       corsAllowedOrigins.includes(normalizedOrigin) ||
+<<<<<<< HEAD
       (allowDevelopmentOrigins && isPrivateNetworkDevOrigin(normalizedOrigin)) ||
       isSafePassHostedOrigin(normalizedOrigin)
+=======
+      (allowPrivateNetworkDevOrigins && isPrivateNetworkDevOrigin(normalizedOrigin))
+>>>>>>> f649f6795016977e265a2d6fe7906dce010a0d08
     ) {
       return callback(null, true);
     }
 
+<<<<<<< HEAD
     console.warn(`Blocked unlisted CORS origin: ${normalizedOrigin}`);
     return callback(null, false);
+=======
+    console.warn(`Rejected unlisted CORS origin: ${normalizedOrigin}`);
+    const corsError = new Error("Origin is not allowed by CORS");
+    corsError.code = "CORS_ORIGIN_DENIED";
+    corsError.status = 403;
+    return callback(corsError);
+>>>>>>> f649f6795016977e265a2d6fe7906dce010a0d08
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -1523,9 +1521,25 @@ app.use(
 // Handle preflight requests. Express 5 rejects bare "*" paths.
 app.options(/.*/, cors(corsOptions));
 
-// Body parser middleware
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+// Keep ordinary API requests small. Only the routes that accept base64 image
+// data receive the larger limit, reducing memory pressure from untrusted input.
+const DEFAULT_REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || "1mb";
+const IMAGE_UPLOAD_BODY_LIMIT = process.env.IMAGE_UPLOAD_BODY_LIMIT || "12mb";
+const imageUploadJsonParser = express.json({ limit: IMAGE_UPLOAD_BODY_LIMIT });
+const imageUploadRoutes = [
+  { method: "PUT", pattern: /^\/api\/profile\/?$/ },
+  { method: "POST", pattern: /^\/api\/appointments\/id-ocr\/validate\/?$/ },
+  { method: "PUT", pattern: /^\/api\/visitors\/[^/]+\/visit\/?$/ },
+];
+
+app.use((req, res, next) => {
+  const acceptsImageUpload = imageUploadRoutes.some(
+    ({ method, pattern }) => req.method === method && pattern.test(req.path),
+  );
+  return acceptsImageUpload ? imageUploadJsonParser(req, res, next) : next();
+});
+app.use(express.json({ limit: DEFAULT_REQUEST_BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: DEFAULT_REQUEST_BODY_LIMIT }));
 
 // ========== DATABASE CONNECTION ==========
 const isHostedRuntime =
@@ -1539,11 +1553,6 @@ const FRONTEND_URL =
   process.env.FRONTEND_URL || "https://sapphiresafepass2.vercel.app";
 const maskMongoUri = (uri = "") =>
   String(uri).replace(/\/\/([^:]+):([^@]+)@/, "//$1:***@");
-const getDatabaseStateName = () => {
-  const states = ["Disconnected", "Connected", "Connecting", "Disconnecting"];
-  return states[mongoose.connection.readyState] || "Unknown";
-};
-
 let mongoConnectionPromise = global.__safepassMongoConnectionPromise;
 let mongoConnectionError = global.__safepassMongoConnectionError || null;
 let mongoReconnectTimer = null;
@@ -1656,7 +1665,8 @@ mongoose.connection.on("error", (error) => {
 });
 
 connectToDatabase().catch(() => {
-  // /api/health reports the database state so Render can show the issue clearly.
+  // Keep connection details in server logs; the public health endpoint exposes
+  // only whether the service is ready.
 });
 
 const authAttemptLimiter = createRateLimiter({
@@ -4966,9 +4976,12 @@ const getApprovedAppointmentDuplicateKey = (visitor = {}) => {
   const purpose = normalizeAppointmentDuplicateText(
     visitor.purposeOfVisit || visitor.customPurposeOfVisit || visitor.purposeCategory,
   );
+  const department = normalizeDepartmentValue(
+    visitor.appointmentDepartment || visitor.assignedOffice || visitor.host,
+  );
   const day = getAppointmentDuplicateDayKey(visitor.visitDate);
-  if (!email || !purpose || !day) return "";
-  return `${email}|${purpose}|${day}`;
+  if (!email || !purpose || !department || !day) return "";
+  return `${email}|${purpose}|${department}|${day}`;
 };
 
 const closeDuplicateApprovedAppointments = async (approvedVisitor) => {
@@ -6798,23 +6811,10 @@ app.put("/api/profile", authMiddleware, async (req, res) => {
       { new: true, runValidators: true },
     ).select("-password");
 
+    // Keep every appointment record linked to the visitor account. Updating only
+    // the newest Visitor document could orphan older requests after an email edit.
     if (user?.role === "visitor") {
-      const visitorUpdates = {};
-      if (updates.firstName !== undefined || updates.lastName !== undefined) {
-        visitorUpdates.fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim();
-      }
-      if (updates.email !== undefined) visitorUpdates.email = user.email;
-      if (updates.phone !== undefined && updates.phone) visitorUpdates.phoneNumber = updates.phone;
-
-      if (Object.keys(visitorUpdates).length > 0) {
-        let visitor = null;
-        if (user.visitorId) visitor = await Visitor.findById(user.visitorId);
-        if (!visitor) visitor = await Visitor.findOne({ email: existingUser.email }).sort({ registeredAt: -1 });
-        if (visitor) {
-          Object.assign(visitor, visitorUpdates);
-          await visitor.save();
-        }
-      }
+      await syncVisitorRecordsForUserUpdate(existingUser, user);
     }
 
     res.json({
@@ -9575,60 +9575,8 @@ app.get("/api/health", (req, res) => {
   res.status(databaseConnected ? 200 : 503).json({
     status: databaseConnected ? "OK" : "DEGRADED",
     success: databaseConnected,
-    database: getDatabaseStateName(),
-    databaseConfigured: Boolean(MONGODB_URI),
-    databaseError: mongoConnectionError,
-    buildVersion:
-      process.env.RENDER_GIT_COMMIT ||
-      process.env.VERCEL_GIT_COMMIT_SHA ||
-      process.env.SOURCE_VERSION ||
-      "local",
-    corsMode: "dynamic-origin",
-    emailDelivery: {
-      configured: Boolean(mailTransporter),
-      verified: mailTransporterVerified,
-      mode: mailTransporter ? "smtp" : "simulation",
-    },
+    service: "SafePass API",
     timestamp: new Date(),
-    endpoints: {
-      auth: {
-        register: "POST /api/register",
-        login: "POST /api/login",
-        profile: "GET /api/profile",
-        logout: "POST /api/logout",
-      },
-      visitors: {
-        register: "POST /api/visitors/register",
-        profile: "GET /api/visitor/profile",
-        getByUser: "GET /api/visitors/user/:userId",
-        updateVisit: "PUT /api/visitors/:userId/visit",
-        stats: "GET /api/visitors/stats",
-        checkin: "PUT /api/visitors/:id/self-checkin",
-        checkout: "PUT /api/visitors/:id/self-checkout",
-      },
-      admin: {
-        pendingVisitors: "GET /api/admin/visitors/pending",
-        approveVisitor: "PUT /api/admin/visitors/:id/approve",
-        rejectVisitor: "PUT /api/admin/visitors/:id/reject",
-        allVisitors: "GET /api/admin/visitors",
-        stats: "GET /api/admin/stats",
-        users: "GET /api/admin/users",
-      },
-      security: {
-        notifications: "GET /api/notifications",
-        markRead: "PUT /api/notifications/:id/read",
-        checkin: "PUT /api/visitors/:id/checkin",
-        checkout: "PUT /api/visitors/:id/checkout",
-      },
-      access: {
-        logs: "GET /api/access-logs",
-        nfcStationTap: "POST /api/nfc/station/tap",
-        create: "POST /api/access-log",
-      },
-      device: {
-        locationTap: "POST /api/device/location-tap",
-      },
-    },
   });
 });
 
@@ -15188,6 +15136,15 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  if (err?.code === "CORS_ORIGIN_DENIED") {
+    return res.status(403).json({ error: "Origin is not allowed" });
+  }
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({
+      error: "Request body is too large",
+      message: "Reduce the upload size and try again.",
+    });
+  }
   console.error('Server error:', err);
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });

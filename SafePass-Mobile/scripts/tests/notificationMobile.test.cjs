@@ -130,6 +130,55 @@ test('choosing a different staff member in the same office replaces the recipien
   assert.equal(form.departments.length, 1);
 });
 
+test('visitor profile editing is mounted and uses the backend phone field', () => {
+  const source = fs.readFileSync(path.join(root, 'screens/VisitorDashboardScreen.jsx'), 'utf8');
+  let saveHandler;
+  traverse(parser.parse(source, { sourceType: 'module', plugins: ['jsx'] }), { VariableDeclarator(p) {
+    if (p.node.id.name === 'handleProfileEditSave') saveHandler = source.slice(p.node.init.start, p.node.init.end);
+  } });
+  assert.match(source, /\{renderProfileEditModal\(\)\}/);
+  assert.ok(saveHandler);
+  assert.match(saveHandler, /phone:\s*profileEditForm\.phoneNumber\.trim\(\)/);
+});
+
+test('new appointment requests require a fresh time and format slots as wall-clock values', () => {
+  const source = fs.readFileSync(path.join(root, 'screens/VisitorDashboardScreen.jsx'), 'utf8');
+  assert.match(source, /const buildAppointmentForm[\s\S]*?preferredTime:\s*null/);
+  assert.match(source, /const formatAppointmentSlotTime[\s\S]*?toLocaleTimeString/);
+  assert.match(source, /\{formatAppointmentSlotTime\(option\)\}/);
+  assert.match(source, /time:\s*formatAppointmentSlotTime\(preferredTime\)/);
+});
+
+test('appointment submission has a synchronous duplicate-request guard', () => {
+  const source = fs.readFileSync(path.join(root, 'screens/VisitorDashboardScreen.jsx'), 'utf8');
+  assert.match(source, /const appointmentSubmitInFlightRef = useRef\(false\)/);
+  assert.match(source, /const handleRequestAppointment[\s\S]*?if \(appointmentSubmitInFlightRef\.current\) return/);
+  assert.match(source, /appointmentSubmitInFlightRef\.current = true[\s\S]*?finally \{[\s\S]*?appointmentSubmitInFlightRef\.current = false/);
+});
+
+test('multi-department approvals do not collide as duplicate appointments', () => {
+  const source = fs.readFileSync(path.join(root, 'backend/server.js'), 'utf8');
+  let expression;
+  traverse(parser.parse(source, { sourceType: 'script' }), { VariableDeclarator(p) {
+    if (p.node.id.name === 'getApprovedAppointmentDuplicateKey') expression = source.slice(p.node.init.start, p.node.init.end);
+  } });
+  assert.ok(expression);
+  const getKey = vm.runInNewContext(`(${expression})`, {
+    normalizeAppointmentDuplicateText: value => String(value || '').trim().toLowerCase(),
+    normalizeDepartmentValue: value => String(value || '').trim().toLowerCase().replace("registrar's office", 'registrar'),
+    getAppointmentDuplicateDayKey: () => '2026-09-09',
+  });
+  const base = { email: 'visitor@example.com', purposeOfVisit: 'Enrollment', visitDate: new Date() };
+  assert.notEqual(
+    getKey({ ...base, appointmentDepartment: 'Registrar' }),
+    getKey({ ...base, appointmentDepartment: 'Accounting' }),
+  );
+  assert.equal(
+    getKey({ ...base, appointmentDepartment: 'Registrar' }),
+    getKey({ ...base, appointmentDepartment: "Registrar's Office" }),
+  );
+});
+
 test('backend selected staff lookup enforces exact ID, active status, role and office', async () => {
   const source = fs.readFileSync(path.join(root, 'backend/server.js'), 'utf8');
   let expression;
