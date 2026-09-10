@@ -28,13 +28,15 @@ export default function AviationSplash({
   useEffect(() => {
     if (Platform.OS === "web") {
       const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-      // Keep navigation feedback brief; reduced-motion users skip the flight animation.
-      const timer = setTimeout(() => {
-        onBeforeFadeRef.current?.();
-        onDoneRef.current?.();
-      }, reducedMotion ? 0 : 350);
-      return () => clearTimeout(timer);
+      if (reducedMotion) {
+        const timer = setTimeout(() => {
+          onBeforeFadeRef.current?.();
+          onDoneRef.current?.();
+        }, 0);
+        return () => clearTimeout(timer);
+      }
     }
+
     progressAnim.setValue(0);
     overlayAnim.setValue(1);
 
@@ -43,6 +45,7 @@ export default function AviationSplash({
       duration,
       easing: mode === "journey" ? Easing.linear : Easing.inOut(Easing.cubic),
       useNativeDriver: Platform.OS !== "web",
+      isInteraction: false,
     }).start(({ finished }) => {
       if (!finished) return;
       onBeforeFadeRef.current?.();
@@ -51,6 +54,7 @@ export default function AviationSplash({
         duration: 420,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: Platform.OS !== "web",
+        isInteraction: false,
       }).start(() => {
         onDoneRef.current?.();
       });
@@ -69,10 +73,10 @@ export default function AviationSplash({
     transform: [
       {
         translateX: progressAnim.interpolate({
-          inputRange: mode === "journey" ? [0, 0.4, 0.54, 0.84, 1] : [0, 0.72, 1],
+          inputRange: mode === "journey" ? [0, 0.32, 0.68, 1] : [0, 0.72, 1],
           outputRange:
             mode === "journey"
-              ? [-108, 144, -132, 82, 124]
+              ? [-132, -52, 54, 132]
               : mode === "takeoff"
                 ? [-96, 78, 142]
                 : [-132, 84, 124],
@@ -80,10 +84,10 @@ export default function AviationSplash({
       },
       {
         translateY: progressAnim.interpolate({
-          inputRange: mode === "journey" ? [0, 0.4, 0.54, 0.84, 1] : [0, 0.72, 1],
+          inputRange: mode === "journey" ? [0, 0.32, 0.68, 1] : [0, 0.72, 1],
           outputRange:
             mode === "journey"
-              ? [-5, -82, -62, -18, -6]
+              ? [-6, -60, -60, -6]
               : mode === "takeoff"
                 ? [-5, -28, -76]
                 : [-64, -18, -6],
@@ -91,10 +95,10 @@ export default function AviationSplash({
       },
       {
         rotate: progressAnim.interpolate({
-          inputRange: mode === "journey" ? [0, 0.4, 0.54, 0.84, 1] : [0, 0.72, 1],
+          inputRange: mode === "journey" ? [0, 0.32, 0.68, 1] : [0, 0.72, 1],
           outputRange:
             mode === "journey"
-              ? ["0deg", "-15deg", "-12deg", "-5deg", "0deg"]
+              ? ["-3deg", "-12deg", "-4deg", "2deg"]
               : mode === "takeoff"
                 ? ["0deg", "-8deg", "-16deg"]
                 : ["-13deg", "-5deg", "0deg"],
