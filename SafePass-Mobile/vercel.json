@@ -34,6 +34,17 @@
   ],
   "routes": [
     {
+      "src": "/(.*)",
+      "headers": {
+        "Content-Security-Policy": "default-src 'self'; base-uri 'self'; connect-src 'self' https://safepass-052h.onrender.com https://accounts.google.com https://*.googleapis.com; font-src 'self' data:; frame-ancestors 'none'; frame-src https://accounts.google.com; img-src 'self' data: blob: https:; object-src 'none'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; form-action 'self'; upgrade-insecure-requests",
+        "Permissions-Policy": "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY"
+      },
+      "continue": true
+    },
+    {
       "src": "/api/health",
       "dest": "/api/health.js"
     },

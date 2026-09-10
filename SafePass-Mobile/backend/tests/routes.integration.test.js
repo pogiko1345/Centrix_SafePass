@@ -342,6 +342,24 @@ test.beforeEach(() => {
   state.accessLogSaves = [];
 });
 
+test("API sends security headers and limits browser origins", async () => {
+  const allowed = await requestJson("/api/health", {
+    headers: { Origin: "https://siaacentrixsafepass.com" },
+  });
+  assert.equal(
+    allowed.headers.get("access-control-allow-origin"),
+    "https://siaacentrixsafepass.com",
+  );
+  assert.equal(allowed.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(allowed.headers.get("x-frame-options"), "DENY");
+  assert.equal(allowed.headers.get("x-powered-by"), null);
+
+  const blocked = await requestJson("/api/health", {
+    headers: { Origin: "https://untrusted.example" },
+  });
+  assert.equal(blocked.headers.get("access-control-allow-origin"), null);
+});
+
 test("login returns the same error for unknown users and wrong passwords", async () => {
   persistDoc({
     _id: "user-1",

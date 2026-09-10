@@ -42,6 +42,17 @@ const otpStore = new Map();
 require("dotenv").config();
 
 const app = express();
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+  );
+  next();
+});
 const isVercelRuntime = Boolean(process.env.VERCEL);
 const isProductionRuntime = String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
 const sensitiveDebugLoggingEnabled =
@@ -1434,6 +1445,12 @@ const corsAllowedOrigins = Array.from(
   ),
 );
 
+const allowDevelopmentOrigins = !(
+  process.env.NODE_ENV === "production" ||
+  process.env.RENDER ||
+  process.env.VERCEL
+);
+
 const isPrivateNetworkDevOrigin = (origin = "") => {
   try {
     const parsedOrigin = new URL(origin);
@@ -1478,14 +1495,14 @@ const corsOptions = {
     const normalizedOrigin = String(origin || "").replace(/\/$/, "");
     if (
       corsAllowedOrigins.includes(normalizedOrigin) ||
-      isPrivateNetworkDevOrigin(normalizedOrigin) ||
+      (allowDevelopmentOrigins && isPrivateNetworkDevOrigin(normalizedOrigin)) ||
       isSafePassHostedOrigin(normalizedOrigin)
     ) {
       return callback(null, true);
     }
 
-    console.warn(`Allowing unlisted CORS origin: ${normalizedOrigin}`);
-    return callback(null, true);
+    console.warn(`Blocked unlisted CORS origin: ${normalizedOrigin}`);
+    return callback(null, false);
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
