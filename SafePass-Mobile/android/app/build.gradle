@@ -101,7 +101,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 5
-        versionName "1.0.1"
+        versionName "1.0.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -109,7 +109,7 @@ android {
     productFlavors {
         full {
             dimension "app"
-            resValue "string", "app_name", "Centrix Safepass"
+            resValue "string", "app_name", "CentrixMobile"
         }
         visitor {
             dimension "app"

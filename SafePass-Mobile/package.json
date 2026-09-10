@@ -12,6 +12,8 @@
     "preview:web": "npm run build:web && npm run serve:web",
     "build:web": "node scripts/cleanWebOutput.js && expo export:web",
     "build:web:visitor": "node scripts/runVisitorWeb.js build",
+    "check:device": "node scripts/checkDeviceReadiness.js",
+    "doctor": "npx expo-doctor && npm run check:device",
     "vercel-build": "npm run build:web",
     "vercel-build:visitor": "npm run build:web:visitor"
   },
@@ -20,7 +22,7 @@
     "@expo/webpack-config": "^18.0.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "^8.6.0",
-    "@react-native-community/netinfo": "^12.0.1",
+    "@react-native-community/netinfo": "11.5.2",
     "@react-native-google-signin/google-signin": "^16.1.5",
     "@react-navigation/native": "6.1.18",
     "@react-navigation/native-stack": "6.9.13",
@@ -77,6 +79,9 @@
   },
   "expo": {
     "doctor": {
+      "appConfigFieldsNotSyncedCheck": {
+        "enabled": false
+      },
       "reactNativeDirectoryCheck": {
         "exclude": [
           "react-native-nfc-manager"
