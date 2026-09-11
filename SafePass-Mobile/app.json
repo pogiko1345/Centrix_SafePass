@@ -2,7 +2,7 @@
   "expo": {
     "name": "CentrixMobile",
     "slug": "safepass-mobile",
-    "version": "1.01",
+    "version": "1.02",
     "orientation": "portrait",
     "icon": "./assets/LogoSapphireAppIcon.png",
     "userInterfaceStyle": "light",
@@ -23,7 +23,7 @@
       }
     },
     "android": {
-      "versionCode": 101,
+      "versionCode": 102,
       "adaptiveIcon": {
         "foregroundImage": "./assets/LogoSapphireAppIcon.png",
         "backgroundColor": "#052044"
@@ -48,7 +48,12 @@
       }
     },
     "plugins": [
-      ["expo-notifications", { "defaultChannel": "campus-updates" }],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "campus-updates"
+        }
+      ],
       "expo-font",
       "expo-secure-store",
       "expo-sharing",

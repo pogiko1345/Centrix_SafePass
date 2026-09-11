@@ -1,12 +1,11 @@
 {
-  "latestVersion": "1.01",
-  "buildNumber": 101,
-  "downloadUrl": "https://github.com/pogiko1345/Centrix_SafePass/releases/download/v1.01/CentrixMobile.apk",
+  "latestVersion": "1.02",
+  "buildNumber": 102,
+  "downloadUrl": "https://github.com/pogiko1345/Centrix_SafePass/releases/download/v1.02/CentrixMobile.apk",
   "releaseNotes": [
-    "Added automatic APK update checks",
-    "Added secure in-app APK downloads",
-    "Improved update and installation guidance"
+    "Removed account-role hints from the login screen",
+    "Improved login privacy"
   ],
   "forceUpdate": false,
-  "publishedAt": "2026-09-11T00:00:00.000Z"
+  "publishedAt": "2026-09-11T12:39:49.217Z"
 }

@@ -53,11 +53,17 @@ if (isWindows && root.length > 60) {
 }
 
 try {
-  const gradle = isWindows ? "gradlew.bat" : "./gradlew";
-  const build = spawnSync(gradle, ["assembleFullRelease", "--no-daemon", "--max-workers=1"], {
-    cwd: path.join(buildRoot, "android"), stdio: "inherit", shell: isWindows,
-    env: { ...process.env, NODE_ENV: "production" },
-  });
+  const buildArgs = ["assembleFullRelease", "--no-daemon", "--max-workers=1"];
+  const build = temporaryDrive
+    ? spawnSync(
+        "cmd.exe",
+        ["/d", "/c", `${temporaryDrive} && cd \\android && gradlew.bat ${buildArgs.join(" ")}`],
+        { cwd: "C:\\", stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } },
+      )
+    : spawnSync(isWindows ? "gradlew.bat" : "./gradlew", buildArgs, {
+        cwd: path.join(buildRoot, "android"), stdio: "inherit", shell: isWindows,
+        env: { ...process.env, NODE_ENV: "production" },
+      });
   if (build.status !== 0) throw new Error(`Android build failed with exit code ${build.status || 1}.`);
   const builtApk = path.join(root, "android", "app", "build", "outputs", "apk", "full", "release", "CentrixMobile.apk");
   const outputDir = path.join(root, "dist");

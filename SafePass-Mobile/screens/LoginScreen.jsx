@@ -403,17 +403,6 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
     );
   };
 
-  const inferCampusRoleFromIdentifier = (value) => {
-    const identifier = normalizeResetEmailValue(value);
-    if (!identifier) return "campus";
-    if (/^(student|student\d+)(@|$)/.test(identifier) || identifier.includes(".student@")) return "student";
-    if (identifier.includes(".staff@") || /(^|[._-])staff(@|[._-]|$)/.test(identifier)) return "staff";
-    if (/^(security|guard)(@|$)/.test(identifier) || /(^|[._-])(security|guard)(@|[._-]|$)/.test(identifier)) return "security";
-    if (/^(admin|administrator)(@|$)/.test(identifier) || /(^|[._-])admin(@|[._-]|$)/.test(identifier)) return "admin";
-    if (!isSchoolManagedIdentifier(identifier)) return "visitor";
-    return "campus";
-  };
-
   const getRoleDisplayName = (role) => {
     switch (normalizeRole(role)) {
       case "student":
@@ -1136,11 +1125,9 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
 
     setIsLoading(true);
     const normalizedIdentifier = normalizeLoginIdentifier(email);
-    const inferredLoginRole =
-      effectiveRole === "campus" ? inferCampusRoleFromIdentifier(normalizedIdentifier) : effectiveRole;
     setLoginSplashMessage(
       apiConnected
-        ? `Checking ${getRoleDisplayName(inferredLoginRole).toLowerCase()} account...`
+        ? "Checking account..."
         : "Connecting to Sapphire...",
     );
     setLoginError("");
@@ -1352,15 +1339,9 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
     }).start();
   };
 
-  const inferredRole = inferCampusRoleFromIdentifier(email);
-  const displayRole = effectiveRole === "campus" ? inferredRole : effectiveRole;
-  const roleConfig = getRoleConfig(displayRole);
-  const shouldShowRoleHint =
-    normalizeLoginIdentifier(email).length >= 3 &&
-    !["campus", "visitor"].includes(normalizeRole(displayRole));
-  const roleHintLabel = `${getRoleDisplayName(displayRole)} account detected`;
+  const roleConfig = getRoleConfig(effectiveRole);
   const showVisitorRegisterEntry =
-    IS_VISITOR_ONLY_APP || ["visitor", "campus"].includes(normalizeRole(displayRole));
+    IS_VISITOR_ONLY_APP || ["visitor", "campus"].includes(normalizeRole(effectiveRole));
   const loginButtonLabel = isLoading
     ? loginSplashMessage.includes("verification")
       ? "Opening verification..."
@@ -1973,15 +1954,6 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
                 <Text style={[loginStyles.welcomeSubtitle, welcomeSubtitleResponsiveStyle]}>
                   {roleConfig.subtitle}
                 </Text>
-
-                {shouldShowRoleHint ? (
-                  <View style={loginStyles.roleDetectedPill}>
-                    <Ionicons name="sparkles-outline" size={15} color={brandColors.blue} />
-                    <Text style={loginStyles.roleDetectedText}>
-                      {roleHintLabel}
-                    </Text>
-                  </View>
-                ) : null}
 
                 {/* STANDARD LOGIN FORM */}
                 <>
