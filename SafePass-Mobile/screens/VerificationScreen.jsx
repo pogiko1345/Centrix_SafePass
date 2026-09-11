@@ -234,14 +234,19 @@ export default function VerificationScreen({ navigation, route }) {
       const response = await ApiService.requestOtp(cleanPhone, "sms");
       
       if (response.success) {
+        const usesBackendOtp = response.deliveryMode === "backend_log";
         setOtpSent(true);
         setShowPhoneInput(false);
         setOtpTimer(60);
         setCanResend(false);
         setOtpNotice({
-          title: "Verification Code Sent",
-          message: `A 6-digit OTP was sent to ${cleanPhone}.`,
-          detail: "It expires in 5 minutes. If it expires, request a new code.",
+          title: usesBackendOtp ? "Test OTP Generated" : "Verification Code Sent",
+          message: usesBackendOtp
+            ? `A test OTP for ${cleanPhone} is available in the backend logs.`
+            : `A 6-digit OTP was sent to ${cleanPhone}.`,
+          detail: usesBackendOtp
+            ? "Open the latest Render backend log entry marked PHONE OTP BACKEND FALLBACK. The code expires in 5 minutes."
+            : "It expires in 5 minutes. If it expires, request a new code.",
         });
       } else {
         Alert.alert("Error", response.message || "Failed to send verification code");

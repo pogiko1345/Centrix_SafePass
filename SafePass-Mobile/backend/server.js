@@ -524,7 +524,14 @@ const getConfiguredSmsProvider = () =>
     .trim()
     .toLowerCase();
 
+const isPhoneOtpBackendLogModeEnabled = () =>
+  String(process.env.PHONE_OTP_BACKEND_LOG_MODE || "true")
+    .trim()
+    .toLowerCase() !== "false";
+
 const getPhoneOtpDeliveryProvider = () => {
+  if (isPhoneOtpBackendLogModeEnabled()) return "backend_log";
+
   const configuredProvider = getConfiguredSmsProvider();
   if (configuredProvider === "semaphore" && getSemaphoreApiKey()) return "semaphore";
   if (configuredProvider === "semaphore") return "backend_log";
@@ -9192,7 +9199,9 @@ app.post("/api/auth/request-otp", async (req, res) => {
         phoneNumber: cleanPhone,
         otpCode,
         method: method || "sms",
-        reason: "SMS provider is not configured; OTP is available in the backend terminal.",
+        reason: isPhoneOtpBackendLogModeEnabled()
+          ? "Temporary backend OTP mode is enabled; no SMS credit was used."
+          : "SMS provider is not configured; OTP is available in the backend terminal.",
       });
       backendLogPrinted = true;
     }
