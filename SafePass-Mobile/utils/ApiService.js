@@ -56,8 +56,13 @@ const WEB_FALLBACK_API_BASE_URL = (() => {
 const API_MODE = String(
   process.env.EXPO_PUBLIC_API_MODE || process.env.NODE_ENV || "production",
 ).toLowerCase();
+const configuredApiBaseUrl =
+  process.env.EXPO_PUBLIC_API_BASE_URL || Constants.expoConfig?.extra?.apiBaseUrl || "";
 const API_BASE_URL = String(
-  process.env.EXPO_PUBLIC_API_BASE_URL || Constants.expoConfig?.extra?.apiBaseUrl || "",
+  configuredApiBaseUrl ||
+    (Platform.OS === "web"
+      ? WEB_FALLBACK_API_BASE_URL
+      : getExpoDevServerApiBaseUrl() || DEPLOYED_API_BASE_URL),
 ).replace(/\/$/, "");
 
 // Playwright sets this explicitly. In that mode, never try the deployed
