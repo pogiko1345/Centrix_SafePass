@@ -24,6 +24,7 @@ const {
 const createAppointmentOptionsRoutes = require("./routes/appointmentOptionsRoutes");
 const { parseStaffAssignments } = require("./services/staffDirectoryService");
 const createPushDeviceRoutes = require("./routes/pushDeviceRoutes");
+const { createAppUpdateRoutes } = require("./routes/appUpdateRoutes");
 const { createPushWorker } = require("./services/pushNotificationService");
 const { createRateLimiter, getRateLimitKey } = require("./utils/securityUtils");
 const {
@@ -1800,6 +1801,7 @@ const createSystemActivity = async ({
 app.use("/api/admin", authMiddleware, requireRoles("admin"));
 app.use("/api/staff", authMiddleware, requireRoles("staff", "admin"));
 app.use("/api", createPushDeviceRoutes({ authMiddleware }));
+app.use("/api", createAppUpdateRoutes());
 app.use(
   "/api",
   createAppointmentOptionsRoutes({

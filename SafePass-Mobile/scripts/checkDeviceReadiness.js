@@ -15,7 +15,11 @@ const hasPermission = (permission) => manifest.includes(`android.permission.${pe
 
 check("Expo-compatible network package", pkg.dependencies["@react-native-community/netinfo"] === "11.5.2");
 check("Android app name", strings.includes(`<string name="app_name">${app.name}</string>`) && gradle.includes(`resValue "string", "app_name", "${app.name}"`));
-check("Android version", gradle.includes(`versionCode ${app.android.versionCode}`) && gradle.includes(`versionName "${app.version}"`));
+check(
+  "Android version",
+  gradle.includes("versionCode expoAppConfig.android.versionCode as Integer") &&
+    gradle.includes("versionName expoAppConfig.version as String")
+);
 check("Camera permission", hasPermission("CAMERA"));
 check("NFC permission", hasPermission("NFC"));
 check("Biometric permission", hasPermission("USE_BIOMETRIC"));

@@ -11,6 +11,7 @@ import { brandColors } from "./styles/brandColors";
 import AviationSplash from "./components/AviationSplash";
 import NotificationInbox from "./components/NotificationInbox";
 import WebAlertHost from "./components/WebAlertHost";
+import AppUpdateManager from "./components/AppUpdateManager";
 import { AviationTransitionContext } from "./utils/AviationTransitionContext";
 import { LoginScreen, RoleSelectScreen } from "./screens/authScreens";
 
@@ -963,6 +964,7 @@ export default function App() {
         </NavigationContainer>
         <NotificationInbox currentUser={currentUser} />
         <WebAlertHost />
+        <AppUpdateManager />
         {aviationTransition ? (
           <AviationSplash
             {...aviationTransition}
