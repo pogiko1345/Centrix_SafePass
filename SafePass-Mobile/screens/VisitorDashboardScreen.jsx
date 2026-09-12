@@ -6296,7 +6296,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           </View>
 
           <View style={[visitorDashboardStyles.appointmentField, appointmentFormColumnResponsiveStyle]}>
-            <Text style={[visitorDashboardStyles.appointmentFieldLabel, isVisitorDarkMode && visitorDashboardStyles.darkKickerText]}>Identity Verification</Text>
+            <Text style={[visitorDashboardStyles.appointmentFieldLabel, isVisitorDarkMode && visitorDashboardStyles.darkKickerText]}>ID Analyzer Verification</Text>
             <View style={[visitorDashboardStyles.appointmentIdUploadCard, isVisitorDarkMode && visitorDashboardStyles.darkUploadCard]}>
               <View style={visitorDashboardStyles.appointmentIdPlaceholder}>
                 <Ionicons name="shield-checkmark-outline" size={28} color="#0A3D91" />
@@ -6307,10 +6307,10 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
                     ? "ID requires manual review"
                     : appointmentForm.idVerification?.verificationStatus === "rejected"
                     ? "ID could not be verified"
-                    : isVerifyingAppointmentId ? "Checking your ID..." : "Optional ID pre-check"}
+                    : isVerifyingAppointmentId ? "Checking your ID..." : "Verify your ID"}
                 </Text>
                 <Text style={[visitorDashboardStyles.appointmentIdPlaceholderText, isVisitorDarkMode && visitorDashboardStyles.darkMutedText]}>
-                  {appointmentForm.idVerification?.message || "Take a photo or choose one from your gallery. You can also bring your selected ID to the gate for manual review."}
+                  {appointmentForm.idVerification?.message || "Take or upload a photo for the ID Analyzer check. Security will also check your physical ID at the gate."}
                 </Text>
                 {isVerifyingAppointmentId ? <ActivityIndicator color="#0A3D91" /> : null}
                 <TouchableOpacity style={visitorDashboardStyles.appointmentChangeIdButton} accessibilityRole="button" onPress={() => selectAppointmentIdImage("camera", "front")} disabled={isVerifyingAppointmentId}>
@@ -6337,7 +6337,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
               </View>
             </View>
             <Text style={[visitorDashboardStyles.appointmentAutoHint, isVisitorDarkMode && visitorDashboardStyles.darkMutedText]}>
-              Present physical ID at gate. Upload is optional; bring the selected ID to campus for security to check. Your ID photo is not sent with the appointment request.
+              No photo? Present the selected physical ID at the gate for manual verification. Your ID photo is not saved with the appointment request.
             </Text>
           </View>
           </View>
