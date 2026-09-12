@@ -3,7 +3,10 @@ const jwt = require("jsonwebtoken");
 const {
   parseIdImage,
   mapIdAnalyzerDecision,
+  detectAppointmentIdType,
   issueIdVerificationProof,
+  issueIdTypeSelectionProof,
+  verifyIdTypeSelectionProof,
   verifyIdVerificationProof,
   buildAppointmentIdReview,
 } = require("../services/appointmentIdVerification");
@@ -24,6 +27,10 @@ assert.equal(mapIdAnalyzerDecision({ decision: "accept" }).verificationStatus, "
 assert.equal(mapIdAnalyzerDecision({ decision: "review" }).verificationStatus, "needs_review");
 assert.equal(mapIdAnalyzerDecision({ decision: "reject" }).verificationStatus, "rejected");
 assert.throws(() => mapIdAnalyzerDecision({ decision: "unknown" }), /unrecognized decision/);
+assert.deepEqual(detectAppointmentIdType({ data: { documentType: [{ value: "P" }] } }), { category: "Passport", idType: "Passport" });
+assert.deepEqual(detectAppointmentIdType({ data: { documentType: [{ value: "D" }] } }), { category: "Driver's License", idType: "Driver's License" });
+assert.deepEqual(detectAppointmentIdType({ data: { documentType: [{ value: "I" }] } }), { category: "Identity card", idType: null });
+assert.deepEqual(detectAppointmentIdType({ data: { documentType: [{ value: "I" }], documentName: [{ value: "Philippine Identification Card - PhilSys" }] } }), { category: "Identity card", idType: "National ID" });
 
 const proof = issueIdVerificationProof({
   userId: "test-user",
@@ -40,6 +47,15 @@ assert.equal(claims.decision, "accept");
 assert.equal(claims.exp - claims.iat, 600);
 assert.equal(claims.imageDigest.length, 64);
 assert.equal(JSON.stringify(claims).includes(base64), false);
+
+const selectionProof = issueIdTypeSelectionProof({
+  userId: "test-user", frontImage: base64, secret: "test-only-secret",
+});
+const selectionArgs = { proof: selectionProof, userId: "test-user", frontImage: base64, secret: "test-only-secret" };
+assert.equal(verifyIdTypeSelectionProof(selectionArgs), true);
+assert.equal(verifyIdTypeSelectionProof({ ...selectionArgs, userId: "other-user" }), false);
+assert.equal(verifyIdTypeSelectionProof({ ...selectionArgs, frontImage: "other-photo" }), false);
+assert.equal(verifyIdTypeSelectionProof({ ...selectionArgs, proof: `${selectionProof.slice(0, 5)}x${selectionProof.slice(6)}` }), false);
 
 const review = (proofValue, overrides = {}) => buildAppointmentIdReview({
   proof: proofValue,

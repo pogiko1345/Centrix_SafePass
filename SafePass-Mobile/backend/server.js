@@ -27,7 +27,7 @@ const createPushDeviceRoutes = require("./routes/pushDeviceRoutes");
 const { createAppUpdateRoutes } = require("./routes/appUpdateRoutes");
 const { createPushWorker } = require("./services/pushNotificationService");
 const { verifyID } = require("./services/idAnalyzerService");
-const { parseIdImage, mapIdAnalyzerDecision, issueIdVerificationProof, buildAppointmentIdReview } = require("./services/appointmentIdVerification");
+const { parseIdImage, mapIdAnalyzerDecision, detectAppointmentIdType, issueIdVerificationProof, issueIdTypeSelectionProof, verifyIdTypeSelectionProof, buildAppointmentIdReview } = require("./services/appointmentIdVerification");
 const { createRateLimiter, getRateLimitKey } = require("./utils/securityUtils");
 const {
   DEFAULT_SYSTEM_SETTINGS,
@@ -10518,16 +10518,16 @@ app.get("/api/visitors/:id/logs", authMiddleware, async (req, res) => {
 // Visitor appointment ID pre-check (retains the existing frontend route).
 app.post("/api/appointments/id-ocr/validate", authMiddleware, async (req, res) => {
   try {
-    const { idType, imageUri, backImageUri = "" } = req.body || {};
+    const { idType, imageUri, backImageUri = "", selectionProof } = req.body || {};
     const normalizedIdType = String(idType || "").trim();
 
-    if (!normalizedIdType || !isAllowedOption(normalizedIdType, APPOINTMENT_ID_TYPE_OPTIONS)) {
+    if (normalizedIdType && !isAllowedOption(normalizedIdType, APPOINTMENT_ID_TYPE_OPTIONS)) {
       return res.status(400).json({
         success: false,
         isValid: false,
         status: "missing_id_type",
         confidence: 0,
-        message: "Choose a valid ID type before scanning.",
+        message: "Choose a valid ID type from the list.",
       });
     }
 
@@ -10546,12 +10546,50 @@ app.post("/api/appointments/id-ocr/validate", authMiddleware, async (req, res) =
       });
     }
 
-    const rawResult = await verifyID(frontImage, backImage);
+    if (selectionProof && (
+      !normalizedIdType ||
+      ["Passport", "Driver's License"].includes(normalizedIdType) ||
+      !verifyIdTypeSelectionProof({
+        proof: selectionProof,
+        userId: req.user._id,
+        frontImage,
+        backImage,
+        secret: getRequiredEnvValue("JWT_SECRET"),
+      })
+    )) {
+      return res.status(400).json({
+        success: false,
+        isValid: false,
+        status: "id_type_selection_expired",
+        message: "This ID selection has expired. Retry the photo check to choose the ID type.",
+      });
+    }
+
+    const rawResult = selectionProof
+      ? { decision: "accept", data: { documentType: [{ value: "I" }] } }
+      : await verifyID(frontImage, backImage);
     const result = mapIdAnalyzerDecision(rawResult);
-    const verificationProof = result.decision === "accept"
+    const detected = detectAppointmentIdType(rawResult);
+    const effectiveIdType = normalizedIdType || detected.idType;
+    const typeMismatch = result.decision === "accept" && Boolean(
+      normalizedIdType && (
+        (detected.idType && detected.idType !== normalizedIdType) ||
+        (detected.category === "Identity card" && ["Passport", "Driver's License"].includes(normalizedIdType))
+      ),
+    );
+    const needsTypeSelection = result.decision === "accept" && !effectiveIdType;
+    const idTypeSelectionProof = (needsTypeSelection || typeMismatch) && detected.category === "Identity card"
+      ? issueIdTypeSelectionProof({
+          userId: req.user._id,
+          frontImage,
+          backImage,
+          secret: getRequiredEnvValue("JWT_SECRET"),
+        })
+      : null;
+    const verificationProof = result.decision === "accept" && effectiveIdType && !typeMismatch
       ? issueIdVerificationProof({
           userId: req.user._id,
-          idType: normalizedIdType,
+          idType: effectiveIdType,
           decision: result.decision,
           frontImage,
           backImage,
@@ -10561,14 +10599,21 @@ app.post("/api/appointments/id-ocr/validate", authMiddleware, async (req, res) =
 
     return res.json({
       success: true,
-      isValid: result.isValid,
-      status: result.status,
-      verificationStatus: result.verificationStatus,
+      isValid: result.isValid && !typeMismatch && !needsTypeSelection,
+      status: typeMismatch ? "id_type_mismatch" : needsTypeSelection ? "id_type_selection_required" : result.status,
+      verificationStatus: typeMismatch || needsTypeSelection ? "needs_review" : result.verificationStatus,
       confidence: 0,
-      idType: normalizedIdType,
+      idType: effectiveIdType || null,
+      detectedIdType: detected.idType,
+      detectedCategory: detected.category,
+      idTypeSelectionProof,
       checkedAt: new Date().toISOString(),
-      message: result.message,
-      checks: [{ key: "document_precheck", passed: result.isValid, label: "Document pre-check completed" }],
+      message: typeMismatch
+        ? `The photo appears to show ${detected.idType || detected.category}, but ${normalizedIdType} was selected. Choose the matching ID type or use another photo.`
+        : needsTypeSelection
+        ? `ID Analyzer recognized ${detected.category || "a document"}, but could not identify the exact ID type. Select the type shown on your card to finish verification.`
+        : result.message,
+      checks: [{ key: "document_precheck", passed: result.isValid && !typeMismatch && !needsTypeSelection, label: "Document pre-check completed" }],
       verificationProof,
     });
   } catch (error) {

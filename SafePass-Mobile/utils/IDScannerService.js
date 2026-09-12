@@ -1,17 +1,8 @@
 import ApiService from './ApiService';
 
 const IDScannerService = {
-  async verifyIDImage({ imageUri, backImageUri = '', idType = '' } = {}) {
+  async verifyIDImage({ imageUri, backImageUri = '', idType = '', selectionProof = null } = {}) {
     const selectedIdType = String(idType || '').trim();
-    if (!selectedIdType) {
-      return {
-        isValid: false,
-        status: 'missing_id_type',
-        verificationStatus: 'error',
-        verificationProof: null,
-        message: 'Choose the ID type before scanning.',
-      };
-    }
     if (!imageUri) {
       return {
         isValid: false,
@@ -24,9 +15,10 @@ const IDScannerService = {
 
     try {
       const result = await ApiService.validateAppointmentIdImage({
-        idType: selectedIdType,
+        idType: selectedIdType || null,
         imageUri,
         backImageUri,
+        selectionProof,
       });
       return {
         isValid: Boolean(result?.isValid),
@@ -35,7 +27,10 @@ const IDScannerService = {
         verificationProof: result?.verificationStatus === 'precheck_passed'
           ? result?.verificationProof || null : null,
         message: result?.message || 'ID pre-check finished. Please present your ID at the gate.',
-        idType: selectedIdType,
+        idType: result?.idType || selectedIdType || null,
+        detectedIdType: result?.detectedIdType || null,
+        detectedCategory: result?.detectedCategory || null,
+        idTypeSelectionProof: result?.idTypeSelectionProof || null,
         checkedAt: result?.checkedAt || null,
       };
     } catch (error) {

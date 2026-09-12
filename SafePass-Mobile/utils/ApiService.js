@@ -1741,7 +1741,7 @@ async verifyCredentials(email, password) {
     }
   }
 
-  async validateAppointmentIdImage({ idType, imageUri, backImageUri } = {}) {
+  async validateAppointmentIdImage({ idType, imageUri, backImageUri, selectionProof } = {}) {
     try {
       return await this.fetch("/appointments/id-ocr/validate", {
         method: "POST",
@@ -1749,6 +1749,7 @@ async verifyCredentials(email, password) {
             idType,
             imageUri,
             ...(backImageUri ? { backImageUri } : {}),
+            ...(selectionProof ? { selectionProof } : {}),
         },
       });
     } catch (error) {

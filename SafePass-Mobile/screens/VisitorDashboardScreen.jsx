@@ -190,20 +190,6 @@ const VISITOR_MODULES = [
   }
 };
 
-const getStoredVisitorIdType = (visitorRecord = {}) => {
-  const explicitType = String(visitorRecord?.idType || "").trim();
-  if (APPOINTMENT_ID_TYPE_OPTIONS.includes(explicitType)) {
-    return explicitType;
-  }
-
-  const legacyValue = String(visitorRecord?.idNumber || "").trim();
-  if (APPOINTMENT_ID_TYPE_OPTIONS.includes(legacyValue)) {
-    return legacyValue;
-  }
-
-  return "";
-};
-
 const PHONE_TRACKING_INTERVAL_MS = 15000;
 const PHONE_TRACKING_DISTANCE_METERS = 8;
 const SMART_REFRESH_MIN_INTERVAL_MS = 30000;
@@ -3004,7 +2990,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       staffAssignments: {},
       purposeSelection: "",
       customPurpose: "",
-      idType: getStoredVisitorIdType(visitorRecord),
+      idType: "",
       idImage: null,
       backIdImage: null,
       idVerification: null,
@@ -3019,21 +3005,23 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     setHasAppointmentDraft(false);
   };
 
-  const verifyAppointmentIdImages = async ({ idType, idImage, backIdImage = "", revision }) => {
-    if (!idType || !idImage) return;
+  const verifyAppointmentIdImages = async ({ idType, idImage, backIdImage = "", selectionProof = null, revision }) => {
+    if (!idImage) return;
     setIsVerifyingAppointmentId(true);
     setAppointmentForm((prev) => ({ ...prev, idVerification: {
       status: "scanning", verificationStatus: "scanning", message: "Checking your ID image...",
     }, verificationProof: null }));
     try {
       const verification = await IDScannerService.verifyIDImage({
-        idType, imageUri: idImage, backImageUri: backIdImage,
+        idType, imageUri: idImage, backImageUri: backIdImage, selectionProof,
       });
       if (appointmentIdRevisionRef.current !== revision) return;
       setAppointmentForm((prev) => ({
         ...prev,
+        idType: prev.idType || verification.detectedIdType || "",
         idVerification: verification,
-        verificationProof: verification.verificationStatus === "precheck_passed"
+        verificationProof: verification.verificationStatus === "precheck_passed" &&
+          verification.idType === (prev.idType || verification.detectedIdType)
           ? verification.verificationProof || null : null,
       }));
     } finally {
@@ -3078,13 +3066,6 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const selectAppointmentIdImage = async (source = "gallery", side = "front") => {
     try {
       const selectionRevision = appointmentIdRevisionRef.current;
-      if (!appointmentForm.idType) {
-        showVisitorAlert(
-          "Choose ID Type First",
-          "Please choose which valid ID you will present before uploading its picture.",
-        );
-        return;
-      }
       if (side === "back" && !appointmentForm.idImage) {
         showVisitorAlert("Front Photo Needed", "Add the front of your ID first.");
         return;
@@ -3124,7 +3105,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   };
 
   const handleVerifyAppointmentIdAgain = async () => {
-    if (!appointmentForm.idType || !appointmentForm.idImage || isVerifyingAppointmentId) return;
+    if (!appointmentForm.idImage || isVerifyingAppointmentId) return;
     const revision = ++appointmentIdRevisionRef.current;
     await verifyAppointmentIdImages({
       idType: appointmentForm.idType,
@@ -6258,18 +6239,30 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
                         isSelected && visitorDashboardStyles.purposeOptionItemActive,
                       ]}
                       onPress={() => {
+                        if (isSelected) {
+                          setShowIdTypeDropdown(false);
+                          return;
+                        }
                         setHasAppointmentDraft(true);
-                        appointmentIdRevisionRef.current += 1;
+                        const selectionProof = appointmentForm.idVerification?.idTypeSelectionProof || null;
+                        const revision = ++appointmentIdRevisionRef.current;
                         setIsVerifyingAppointmentId(false);
                         setAppointmentForm((prev) => ({
                           ...prev,
                           idType: option,
-                          idImage: null,
-                          backIdImage: null,
                           idVerification: null,
                           verificationProof: null,
                         }));
                         setShowIdTypeDropdown(false);
+                        if (appointmentForm.idImage) {
+                          void verifyAppointmentIdImages({
+                            idType: option,
+                            idImage: appointmentForm.idImage,
+                            backIdImage: appointmentForm.backIdImage,
+                            selectionProof,
+                            revision,
+                          });
+                        }
                       }}
                       activeOpacity={0.85}
                     >
@@ -6300,6 +6293,18 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
             <View style={[visitorDashboardStyles.appointmentIdUploadCard, isVisitorDarkMode && visitorDashboardStyles.darkUploadCard]}>
               <View style={visitorDashboardStyles.appointmentIdPlaceholder}>
                 <Ionicons name="shield-checkmark-outline" size={28} color="#0A3D91" />
+                {appointmentForm.idImage ? (
+                  <>
+                    <Text style={visitorDashboardStyles.appointmentIdPlaceholderText}>Front ID photo</Text>
+                    <Image source={{ uri: appointmentForm.idImage }} resizeMode="contain" style={visitorDashboardStyles.appointmentIdPreview} />
+                  </>
+                ) : null}
+                {appointmentForm.backIdImage ? (
+                  <>
+                    <Text style={visitorDashboardStyles.appointmentIdPlaceholderText}>Back ID photo</Text>
+                    <Image source={{ uri: appointmentForm.backIdImage }} resizeMode="contain" style={visitorDashboardStyles.appointmentIdPreview} />
+                  </>
+                ) : null}
                 <Text style={[visitorDashboardStyles.appointmentIdPlaceholderTitle, isVisitorDarkMode && visitorDashboardStyles.darkPrimaryText]}>
                   {appointmentForm.idVerification?.verificationStatus === "precheck_passed"
                     ? "ID pre-check passed"
@@ -6310,7 +6315,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
                     : isVerifyingAppointmentId ? "Checking your ID..." : "Verify your ID"}
                 </Text>
                 <Text style={[visitorDashboardStyles.appointmentIdPlaceholderText, isVisitorDarkMode && visitorDashboardStyles.darkMutedText]}>
-                  {appointmentForm.idVerification?.message || "Take or upload a photo for the ID Analyzer check. Security will also check your physical ID at the gate."}
+                  {appointmentForm.idVerification?.message || "Take or upload a photo. ID Analyzer will identify the document type when possible; security also checks your physical ID at the gate."}
                 </Text>
                 {isVerifyingAppointmentId ? <ActivityIndicator color="#0A3D91" /> : null}
                 <TouchableOpacity style={visitorDashboardStyles.appointmentChangeIdButton} accessibilityRole="button" onPress={() => selectAppointmentIdImage("camera", "front")} disabled={isVerifyingAppointmentId}>

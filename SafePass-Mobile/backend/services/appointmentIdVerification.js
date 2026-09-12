@@ -47,14 +47,69 @@ const mapIdAnalyzerDecision = (rawResult) => {
   throw new Error("ID Analyzer returned an unrecognized decision.");
 };
 
+const firstDocumentField = (rawResult, name) => {
+  const entry = rawResult?.data?.[name];
+  return String(Array.isArray(entry) ? entry[0]?.value || "" : entry?.value || "").trim();
+};
+
+const detectAppointmentIdType = (rawResult) => {
+  const category = firstDocumentField(rawResult, "documentType").toUpperCase();
+  const documentName = firstDocumentField(rawResult, "documentName").toLowerCase();
+  if (category === "P") return { category: "Passport", idType: "Passport" };
+  if (category === "D") return { category: "Driver's License", idType: "Driver's License" };
+
+  const namedTypes = [
+    [/philippine identification|philid|philsys|national id/, "National ID"],
+    [/\bumid\b|unified multi.?purpose/, "UMID"],
+    [/philhealth/, "PhilHealth ID"],
+    [/voter|comelec/, "Voter's ID"],
+    [/professional regulation|\bprc\b/, "PRC ID"],
+    [/postal|phlpost/, "Postal ID"],
+    [/senior citizen|\bosca\b/, "Senior Citizen ID"],
+    [/school|student|university|college/, "School ID"],
+    [/company|employee/, "Company ID"],
+  ];
+  const namedMatch = namedTypes.find(([pattern]) => pattern.test(documentName));
+  if (namedMatch) return { category: "Identity card", idType: namedMatch[1] };
+  if (category === "I") return { category: "Identity card", idType: null };
+  return { category: null, idType: null };
+};
+
 const issueIdVerificationProof = ({ userId, idType, decision, frontImage, backImage = "", secret }) => {
   if (!secret) throw new Error("JWT_SECRET is required for ID verification proofs.");
-  const imageDigest = crypto.createHash("sha256").update(frontImage).update("\0").update(backImage).digest("hex");
+  const imageDigest = hashIdImages(frontImage, backImage);
   return jwt.sign(
     { purpose: "visitor_id_precheck", idType, decision, imageDigest },
     secret,
     { subject: String(userId), expiresIn: PROOF_LIFETIME_SECONDS, algorithm: "HS256" },
   );
+};
+
+const hashIdImages = (frontImage, backImage = "") =>
+  crypto.createHash("sha256").update(frontImage).update("\0").update(backImage).digest("hex");
+
+const issueIdTypeSelectionProof = ({ userId, frontImage, backImage = "", secret }) =>
+  jwt.sign(
+    { purpose: "visitor_id_type_selection", decision: "accept", category: "Identity card", imageDigest: hashIdImages(frontImage, backImage) },
+    secret,
+    { subject: String(userId), expiresIn: PROOF_LIFETIME_SECONDS, algorithm: "HS256" },
+  );
+
+const verifyIdTypeSelectionProof = ({ proof, userId, frontImage, backImage = "", secret }) => {
+  if (typeof proof !== "string" || !proof || !secret) return false;
+  try {
+    const claims = jwt.verify(proof, secret, { algorithms: ["HS256"] });
+    return claims.purpose === "visitor_id_type_selection" &&
+      claims.decision === "accept" &&
+      claims.category === "Identity card" &&
+      claims.sub === String(userId) &&
+      Number.isInteger(claims.iat) &&
+      Number.isInteger(claims.exp) &&
+      claims.exp - claims.iat === PROOF_LIFETIME_SECONDS &&
+      claims.imageDigest === hashIdImages(frontImage, backImage);
+  } catch (_) {
+    return false;
+  }
 };
 
 const verifyIdVerificationProof = ({ proof, authenticatedUserId, appointmentUserId, idType, secret }) => {
@@ -98,4 +153,4 @@ const buildAppointmentIdReview = ({ idType, proof, authenticatedUserId, appointm
   };
 };
 
-module.exports = { parseIdImage, mapIdAnalyzerDecision, issueIdVerificationProof, verifyIdVerificationProof, buildAppointmentIdReview };
+module.exports = { parseIdImage, mapIdAnalyzerDecision, detectAppointmentIdType, issueIdVerificationProof, issueIdTypeSelectionProof, verifyIdTypeSelectionProof, verifyIdVerificationProof, buildAppointmentIdReview };
