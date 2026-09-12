@@ -586,6 +586,33 @@ test("admin settings can be updated and then read back through the API", async (
   assert.equal(fetchResponse.body.settings.backupFrequency, "weekly");
 });
 
+test("admin health does not claim an unmonitored NFC reader is active", async () => {
+  persistDoc({
+    _id: "admin-health", email: "health-admin@example.com", username: "healthadmin",
+    password: "AdminPass123", role: "admin", status: "active", isVerified: true,
+  });
+  const token = jwt.sign({ userId: "admin-health" }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  const response = await requestJson("/api/admin/health", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.health.nfcService, "Not monitored");
+});
+
+test("admin backup endpoint cannot report success without a real backup", async () => {
+  persistDoc({
+    _id: "admin-backup", email: "backup-admin@example.com", username: "backupadmin",
+    password: "AdminPass123", role: "admin", status: "active", isVerified: true,
+  });
+  const token = jwt.sign({ userId: "admin-backup" }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  const response = await requestJson("/api/admin/backup", {
+    method: "POST", headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.status, 501);
+  assert.equal(response.body.success, false);
+  assert.match(response.body.message, /MongoDB Atlas/);
+});
+
 test("non-admin roles receive 403 Forbidden on admin-only routes", async () => {
   persistDoc({
     _id: "student-1",

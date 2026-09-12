@@ -2330,18 +2330,6 @@ generateRandomPassword(length = 10) {
     }
   }
 
-  async createBackup() {
-    try {
-      const response = await this.fetch("/admin/backup", {
-        method: "POST",
-      });
-      return response;
-    } catch (error) {
-      console.error("Create backup error:", error);
-      throw error;
-    }
-  }
-
   async updateSystemSettings(settings) {
     try {
       const response = await this.fetch("/admin/settings", {

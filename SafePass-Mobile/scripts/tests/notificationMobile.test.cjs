@@ -96,6 +96,7 @@ test('visitor dashboard loads complete appointment payload, isolates offline cac
   const cache = new Map();
   const service = vm.runInNewContext(`({ ${method} })`, {
     AsyncStorage: { getItem: async key => cache.get(key), setItem: async (key,value) => cache.set(key,value) },
+    AbortController, setTimeout, clearTimeout,
     isNetworkLikeError: error => error.message === 'Network unavailable', logApiDebug() {},
   });
   let account = 'visitor-a';

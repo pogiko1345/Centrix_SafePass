@@ -14532,7 +14532,7 @@ app.get("/api/admin/health", authMiddleware, async (req, res) => {
       health: {
         database: dbStatus,
         api: "Running",
-        nfcService: "Active",
+        nfcService: "Not monitored",
         emailDelivery: mailTransporter
           ? mailTransporterVerified
             ? "SMTP Ready"
@@ -14548,32 +14548,15 @@ app.get("/api/admin/health", authMiddleware, async (req, res) => {
   }
 });
 
-// Create backup (simplified)
+// Backups require external storage or a configured MongoDB Atlas backup policy.
 app.post("/api/admin/backup", authMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ success: false, message: "Access denied" });
-    }
-
-    // Create access log
-    const accessLog = new AccessLog({
-      userId: req.user._id,
-      userEmail: req.user.email,
-      userName: `${req.user.firstName} ${req.user.lastName}`,
-      location: "Admin Panel",
-      accessType: "system",
-      status: "granted",
-      notes: "System backup created",
-    });
-    await accessLog.save();
-
-    res.json({ success: true, message: "Backup created successfully" });
-  } catch (error) {
-    console.error("Create backup error:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to create backup" });
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ success: false, message: "Access denied" });
   }
+  return res.status(501).json({
+    success: false,
+    message: "In-app backups are not configured. Manage database backups in MongoDB Atlas.",
+  });
 });
 
 // Get system settings

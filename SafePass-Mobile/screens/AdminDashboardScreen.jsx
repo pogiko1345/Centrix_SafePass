@@ -26,6 +26,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import ApiService from "../utils/ApiService";
+import { fetchAllAdminPages } from "../utils/adminPagination";
 import AIService from "../utils/AIService";
 import SharedMonitoringMap from "../components/SharedMonitoringMap";
 import {
@@ -1213,7 +1214,6 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isRunningSystemAction, setIsRunningSystemAction] = useState(false);
   const [systemHealth, setSystemHealth] = useState(null);
-  const [lastBackupSummary, setLastBackupSummary] = useState(null);
   const [changePasswordData, setChangePasswordData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -2963,7 +2963,10 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
   // FIXED: Load All Visit Requests
   const loadAllVisitRequests = async ({ silent = false } = {}) => {
     try {
-      const response = await ApiService.getAllVisitors({ limit: 500 });
+      const response = await fetchAllAdminPages(
+        (page) => ApiService.getAllVisitors({ limit: 500, page }),
+        "visitors",
+      );
       if (response && response.visitors) {
         const requests = response.visitors || [];
         const pending = requests.filter((r) => getRequestStatus(r) === "pending");
@@ -3039,7 +3042,10 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
   // FIXED: Load All Users
   const loadAllUsers = async () => {
     try {
-      const response = await ApiService.getAllUsers({ limit: 500 });
+      const response = await fetchAllAdminPages(
+        (page) => ApiService.getAllUsers({ limit: 500, page }),
+        "users",
+      );
       if (response && response.users) {
         const users = response.users || [];
         const staff = users.filter((u) => u.role === "staff");
@@ -5154,38 +5160,13 @@ const loadDashboardData = useCallback(async () => {
       const response = await ApiService.getSystemHealth();
       if (response?.success) {
         setSystemHealth(response.health || null);
-        publishAdminNotice("success", "System health refreshed", "Database, API, and NFC service statuses are up to date.");
+        publishAdminNotice("success", "System health refreshed", "Database and API status updated. NFC reader status is not monitored remotely.");
       } else {
         publishAdminNotice("error", "Health check failed", response?.message || "Unable to refresh system health.");
       }
     } catch (error) {
       console.error("System health error:", error);
       publishAdminNotice("error", "Health check failed", error?.message || "Unable to refresh system health.");
-    } finally {
-      setIsRunningSystemAction(false);
-    }
-  };
-
-  const handleCreateBackup = async () => {
-    if (!ensureAdminAccess()) return;
-    setIsRunningSystemAction(true);
-    try {
-      const response = await ApiService.createBackup();
-      if (response?.success) {
-        const backupSummary = {
-          message: response.message || "Backup created successfully.",
-          createdAt: new Date().toISOString(),
-        };
-        setLastBackupSummary(backupSummary);
-        publishAdminNotice("success", "Backup created", backupSummary.message);
-        Alert.alert("Backup Created", backupSummary.message);
-      } else {
-        publishAdminNotice("error", "Backup failed", response?.message || "Unable to create backup.");
-      }
-    } catch (error) {
-      console.error("Create backup error:", error);
-      publishAdminNotice("error", "Backup failed", error?.message || "Unable to create backup.");
-      Alert.alert("Backup Failed", error?.message || "Unable to create backup.");
     } finally {
       setIsRunningSystemAction(false);
     }
@@ -11214,7 +11195,7 @@ const loadDashboardData = useCallback(async () => {
     const healthItems = [
       { label: "Database", value: systemHealth?.database || "Not checked" },
       { label: "API", value: systemHealth?.api || "Not checked" },
-      { label: "NFC Service", value: systemHealth?.nfcService || "Not checked" },
+      { label: "NFC Reader", value: systemHealth?.nfcService || "Not monitored" },
     ];
 
     return (
@@ -11297,7 +11278,7 @@ const loadDashboardData = useCallback(async () => {
                 <View>
                   <Text style={[styles.settingsCardTitle, isDarkMode && styles.darkText]}>System Tools</Text>
                   <Text style={[styles.settingsHeaderSubtitle, isDarkMode && styles.darkTextSecondary]}>
-                    Check service status, create a backup log, or reset local dashboard customizations.
+                    Check service status or reset local dashboard customizations. Manage database backups in MongoDB Atlas.
                   </Text>
                 </View>
                 <Ionicons name="hardware-chip-outline" size={22} color={ADMIN_BLUE} />
@@ -11310,19 +11291,11 @@ const loadDashboardData = useCallback(async () => {
                     <Text style={{ color: theme.textPrimary, fontWeight: "700" }}>{item.value}</Text>
                   </View>
                 ))}
-                {lastBackupSummary && (
-                  <Text style={[styles.inputHint, isDarkMode && styles.darkTextSecondary]}>
-                    Last backup: {formatDateTime(lastBackupSummary.createdAt)}
-                  </Text>
-                )}
               </View>
 
               <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
                 <TouchableOpacity style={[styles.submitButton, { flex: 1, minWidth: 180 }]} onPress={refreshSystemHealth} disabled={isRunningSystemAction}>
                   <Text style={styles.submitButtonText}>Check Health</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.submitButton, { flex: 1, minWidth: 180, backgroundColor: "#10B981" }]} onPress={handleCreateBackup} disabled={isRunningSystemAction}>
-                  <Text style={styles.submitButtonText}>Create Backup</Text>
                 </TouchableOpacity>
               </View>
 
