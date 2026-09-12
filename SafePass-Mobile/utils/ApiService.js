@@ -723,9 +723,11 @@ async register(userData) {
     const user = await this.getCurrentUser();
     if (!user?._id) throw new Error("Please sign in to view your visits.");
     const cacheKey = `visitorDashboardCache:${user._id}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
     try {
       // The dashboard needs appointments and visitor status, not just /profile's user.
-      const response = await this.fetch("/visitor/profile");
+      const response = await this.fetch("/visitor/profile", { signal: controller.signal });
       await AsyncStorage.setItem(cacheKey, JSON.stringify(response)).catch(() => {});
       return response;
     } catch (error) {
@@ -744,6 +746,8 @@ async register(userData) {
 
       // If no cache available, throw original error
       throw error;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

@@ -651,6 +651,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const [appointmentAvailability, setAppointmentAvailability] = useState(null);
   const availabilityRequestRef = useRef(0);
   const visitorDataRequestRef = useRef(0);
+  const visitorForegroundLoadRef = useRef(false);
   const [isLoadingAppointmentSlots, setIsLoadingAppointmentSlots] = useState(false);
   const [staffDirectoryError, setStaffDirectoryError] = useState("");
   const [appointmentOptions, setAppointmentOptions] = useState({
@@ -1693,8 +1694,10 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   };
 
   const loadVisitorData = async ({ silent = false, force = false } = {}) => {
+    if (silent && visitorForegroundLoadRef.current) return;
     const requestId = ++visitorDataRequestRef.current;
     if (!silent) {
+      visitorForegroundLoadRef.current = true;
       setIsLoading(true);
     }
     try {
@@ -1732,7 +1735,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       const profileChanged = visitorProfileSignatureRef.current !== nextProfileSignature;
 
       if (!force && silent && !profileChanged) {
-        await maybeShowVisitorWarning(currentUser);
+        void maybeShowVisitorWarning(currentUser);
         return;
       }
 
@@ -1786,7 +1789,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         hasLoadedVisitorRef.current = true;
       }
 
-      await maybeShowVisitorWarning(currentUser);
+      void maybeShowVisitorWarning(currentUser);
       setConnectionIssue(null);
     } catch (error) {
       if (requestId !== visitorDataRequestRef.current) return;
@@ -1812,6 +1815,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       }
     } finally {
       if (!silent && requestId === visitorDataRequestRef.current) {
+        visitorForegroundLoadRef.current = false;
         setIsLoading(false);
       }
     }
