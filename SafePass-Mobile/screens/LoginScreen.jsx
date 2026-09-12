@@ -685,7 +685,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
         setLoginOtpResendAvailableAt(new Date(Date.now() + 60 * 1000).toISOString());
         setLoginSuccessMessage(
           response.otpDeliveryMode === "backend_log"
-            ? "A new verification code has been generated. Please check your email for the code."
+            ? "A new code is in the development backend logs. Ask the developer for it."
             : "A new verification code was sent to your email.",
         );
         return;
@@ -1188,7 +1188,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
     } catch (error) {
       const errorMessage = String(error?.message || "");
       
-      const otpEmail = normalizeResetEmailValue(email);
+      const otpEmail = normalizeResetEmailValue(error?.data?.verificationEmail || email);
       const shouldOfferVisitorActivation =
         error?.data?.requiresOtpVerification === true &&
         !isSchoolManagedIdentifier(otpEmail);

@@ -126,6 +126,7 @@ const shouldLogApiError = (key) => {
   return true;
 };
 const logApiFetchError = ({ url, baseUrl, error }) => {
+  if (url === "/login" && error?.data?.requiresOtpVerification === true) return;
   if (url === "/appointments/id-ocr/validate") {
     console.error(`[ApiService] ID pre-check request failed (${error?.status || "network"}).`);
     return;
@@ -813,7 +814,9 @@ async verifyCredentials(email, password) {
       };
     
   } catch (error) {
-    console.error("Verify credentials error:", error);
+    if (error?.data?.requiresOtpVerification !== true) {
+      console.error("Verify credentials error:", error);
+    }
 
     if (!this.isDevFallbackEnabled()) {
       const credentialError = new Error(

@@ -2703,14 +2703,14 @@ const sendEmail = async (to, subject, body, options = {}) => {
 const canUseBackendLogOtpFallback = () => sensitiveDebugLoggingEnabled;
 
 const isOtpDeliveryUsable = (emailResult) =>
-  Boolean(emailResult?.success || canUseBackendLogOtpFallback());
+  Boolean(emailResult?.delivered || canUseBackendLogOtpFallback());
 
 const getOtpDeliveryMode = (emailResult) => {
   if (emailResult?.delivered) {
     return "email";
   }
 
-  if (emailResult?.simulated || canUseBackendLogOtpFallback()) {
+  if (canUseBackendLogOtpFallback()) {
     return "backend_log";
   }
 
@@ -6389,6 +6389,7 @@ app.post("/api/login", async (req, res) => {
         error: "Your account is not yet verified",
         message: "Please verify your email to continue.",
         requiresOtpVerification: true,
+        verificationEmail: user.email,
       });
     }
 

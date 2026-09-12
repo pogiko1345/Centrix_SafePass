@@ -77,7 +77,7 @@ const SuccessModal = ({
             {isVerified
               ? "Your account is verified. Continue to sign in to your visitor account."
               : otpDeliveryMode === "backend_log"
-                ? "Email delivery is not available right now. Please check your email for the verification code."
+                ? "Email delivery is unavailable in this development setup. Ask the developer for the code shown in the backend logs."
                 : "Enter the 6-digit verification code sent to your email. Your visitor account stays locked until this code is verified."}
           </Text>
           {account?.email ? (
@@ -1204,7 +1204,6 @@ export default function VisitorRegisterScreen({ navigation, route }) {
           isVerified: true,
         }));
         setRegistrationOtpResendAvailableAt(null);
-        await handleSuccessConfirm();
         return;
       }
 
@@ -1244,7 +1243,7 @@ export default function VisitorRegisterScreen({ navigation, route }) {
         Alert.alert(
           "Verification Code Sent",
           response.otpDeliveryMode === "backend_log"
-            ? "A new verification code has been generated. Please check your email for the code."
+            ? "A new code is in the development backend logs. Ask the developer for it."
             : "A new verification code has been sent to your email. Please also check your spam folder just in case.",
         );
         return;
