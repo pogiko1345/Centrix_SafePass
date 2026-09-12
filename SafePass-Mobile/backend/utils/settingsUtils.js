@@ -2,7 +2,6 @@ const DEFAULT_SYSTEM_SETTINGS = {
   maintenanceMode: false,
   emailNotifications: true,
   smsAlerts: true,
-  backupFrequency: "daily",
   sessionTimeout: "30",
   maxLoginAttempts: "5",
   autoApprove: false,
@@ -228,7 +227,7 @@ const SETTINGS_BOOLEAN_KEYS = [
   "twoFactorAuth",
 ];
 
-const SETTINGS_STRING_KEYS = ["backupFrequency", "sessionTimeout", "maxLoginAttempts"];
+const SETTINGS_STRING_KEYS = ["sessionTimeout", "maxLoginAttempts"];
 
 const sanitizeSystemSettings = (input = {}) => {
   const sanitized = { ...DEFAULT_SYSTEM_SETTINGS };

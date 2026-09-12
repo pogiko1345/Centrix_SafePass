@@ -189,7 +189,6 @@ const AppSettingsMock = {
         maintenanceMode: false,
         emailNotifications: true,
         smsAlerts: true,
-        backupFrequency: "daily",
         sessionTimeout: "30",
         maxLoginAttempts: "5",
         autoApprove: false,
@@ -573,7 +572,7 @@ test("admin settings can be updated and then read back through the API", async (
   assert.equal(updateResponse.body.settings.maintenanceMode, true);
   assert.equal(updateResponse.body.settings.emailNotifications, false);
   assert.equal(updateResponse.body.settings.sessionTimeout, "45");
-  assert.equal(updateResponse.body.settings.backupFrequency, "weekly");
+  assert.equal("backupFrequency" in updateResponse.body.settings, false);
 
   const fetchResponse = await requestJson("/api/admin/settings", {
     headers: { Authorization: `Bearer ${token}` },
@@ -583,7 +582,7 @@ test("admin settings can be updated and then read back through the API", async (
   assert.equal(fetchResponse.body.settings.maintenanceMode, true);
   assert.equal(fetchResponse.body.settings.emailNotifications, false);
   assert.equal(fetchResponse.body.settings.sessionTimeout, "45");
-  assert.equal(fetchResponse.body.settings.backupFrequency, "weekly");
+  assert.equal("backupFrequency" in fetchResponse.body.settings, false);
 });
 
 test("admin health does not claim an unmonitored NFC reader is active", async () => {

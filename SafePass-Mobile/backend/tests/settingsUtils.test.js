@@ -22,7 +22,7 @@ test("sanitizeSystemSettings normalizes booleans and strings", () => {
   assert.equal(sanitized.maintenanceMode, true);
   assert.equal(sanitized.emailNotifications, false);
   assert.equal(sanitized.sessionTimeout, "45");
-  assert.equal(sanitized.backupFrequency, "weekly");
+  assert.equal("backupFrequency" in sanitized, false);
   assert.equal(sanitized.maxLoginAttempts, DEFAULT_SYSTEM_SETTINGS.maxLoginAttempts);
 });
 

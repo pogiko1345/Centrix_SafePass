@@ -12,7 +12,6 @@ const appSettingsSchema = new mongoose.Schema(
     maintenanceMode: { type: Boolean, default: false },
     emailNotifications: { type: Boolean, default: true },
     smsAlerts: { type: Boolean, default: true },
-    backupFrequency: { type: String, default: "daily" },
     sessionTimeout: { type: String, default: "30" },
     maxLoginAttempts: { type: String, default: "5" },
     autoApprove: { type: Boolean, default: false },
