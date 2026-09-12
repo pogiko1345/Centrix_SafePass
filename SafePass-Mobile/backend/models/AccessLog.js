@@ -8,7 +8,7 @@ const accessLogSchema = new mongoose.Schema({
   location: String,
   accessType: { type: String, enum: ['entry', 'exit', 'system'] },
   activityType: { type: String, default: '' },
-  status: { type: String, enum: ['granted', 'denied', 'pending'] },
+  status: { type: String, enum: ['granted', 'denied', 'pending', 'no_show', 'expired', 'warning', 'flagged', 'cancelled'] },
   nfcCardId: String,
   relatedVisitor: { type: mongoose.Schema.Types.ObjectId, ref: 'Visitor', default: null },
   relatedUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
