@@ -1,11 +1,11 @@
 {
-  "latestVersion": "1.02",
-  "buildNumber": 102,
-  "downloadUrl": "https://github.com/pogiko1345/Centrix_SafePass/releases/download/v1.02/CentrixMobile.apk",
+  "latestVersion": "1.03",
+  "buildNumber": 103,
+  "downloadUrl": "https://github.com/pogiko1345/Centrix_SafePass/releases/download/v1.03/CentrixMobile.apk",
   "releaseNotes": [
-    "Removed account-role hints from the login screen",
-    "Improved login privacy"
+    "Visitor ID Analyzer photo preview and ID type detection",
+    "Improved appointment scheduling and notifications"
   ],
   "forceUpdate": false,
-  "publishedAt": "2026-09-11T12:39:49.217Z"
+  "publishedAt": "2026-09-12T14:00:30.694Z"
 }

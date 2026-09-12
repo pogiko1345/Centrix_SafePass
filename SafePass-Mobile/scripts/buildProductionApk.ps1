@@ -39,7 +39,13 @@ try {
     Pop-Location
 }
 
-$apkSource = Join-Path $projectDirectory "android\app\build\outputs\apk\$Variant\release\app-$Variant-release.apk"
+$apkOutputDirectory = Join-Path $projectDirectory "android\app\build\outputs\apk\$Variant\release"
+$apkMetadata = Get-Content -LiteralPath (Join-Path $apkOutputDirectory 'output-metadata.json') -Raw | ConvertFrom-Json
+$apkOutputFile = $apkMetadata.elements[0].outputFile
+if (-not $apkOutputFile -or [IO.Path]::GetFileName($apkOutputFile) -ne $apkOutputFile) {
+    throw 'Android build metadata did not contain a valid APK filename.'
+}
+$apkSource = Join-Path $apkOutputDirectory $apkOutputFile
 $downloadDirectory = Join-Path $projectDirectory 'dist'
 New-Item -ItemType Directory -Path $downloadDirectory -Force | Out-Null
 $apkName = if ($Variant -eq 'full') { 'CentrixMobile.apk' } else { 'SafePass-Visitor-Live.apk' }
