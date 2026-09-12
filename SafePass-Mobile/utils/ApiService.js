@@ -126,6 +126,10 @@ const shouldLogApiError = (key) => {
   return true;
 };
 const logApiFetchError = ({ url, baseUrl, error }) => {
+  if (url === "/appointments/id-ocr/validate") {
+    console.error(`[ApiService] ID pre-check request failed (${error?.status || "network"}).`);
+    return;
+  }
   const message = String(error?.message || "");
   const isNetworkError = isNetworkLikeError(error);
   const status = error?.status ? `:${error.status}` : "";
@@ -529,15 +533,21 @@ async fetch(url, options = {}) {
 
       if (contentType && contentType.includes("application/json")) {
         data = await response.json();
-        logApiDebug("[ApiService] Response data:", data);
+        if (url !== "/appointments/id-ocr/validate") {
+          logApiDebug("[ApiService] Response data:", data);
+        }
       } else {
         const text = await response.text();
         data = text ? { message: text } : {};
-        logApiDebug("[ApiService] Response text:", text);
+        if (url !== "/appointments/id-ocr/validate") {
+          logApiDebug("[ApiService] Response text:", text);
+        }
       }
 
       if (!response.ok) {
-        logApiDebug(`[ApiService] HTTP ${response.status}:`, data);
+        if (url !== "/appointments/id-ocr/validate") {
+          logApiDebug(`[ApiService] HTTP ${response.status}:`, data);
+        }
         const apiError = new Error(data.error || data.message || `HTTP ${response.status}`);
         apiError.status = response.status;
         apiError.data = data;
@@ -1724,17 +1734,18 @@ async verifyCredentials(email, password) {
     }
   }
 
-  async validateAppointmentIdImage({ idType, imageUri } = {}) {
+  async validateAppointmentIdImage({ idType, imageUri, backImageUri } = {}) {
     try {
       return await this.fetch("/appointments/id-ocr/validate", {
         method: "POST",
         body: {
-          idType,
-          imageUri,
+            idType,
+            imageUri,
+            ...(backImageUri ? { backImageUri } : {}),
         },
       });
     } catch (error) {
-      console.error("Validate appointment ID image error:", error);
+      console.error("Validate appointment ID image error.");
       throw error;
     }
   }

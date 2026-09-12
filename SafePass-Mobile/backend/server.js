@@ -26,6 +26,8 @@ const { parseStaffAssignments } = require("./services/staffDirectoryService");
 const createPushDeviceRoutes = require("./routes/pushDeviceRoutes");
 const { createAppUpdateRoutes } = require("./routes/appUpdateRoutes");
 const { createPushWorker } = require("./services/pushNotificationService");
+const { verifyID } = require("./services/idAnalyzerService");
+const { parseIdImage, mapIdAnalyzerDecision, issueIdVerificationProof, buildAppointmentIdReview } = require("./services/appointmentIdVerification");
 const { createRateLimiter, getRateLimitKey } = require("./utils/securityUtils");
 const {
   DEFAULT_SYSTEM_SETTINGS,
@@ -84,9 +86,6 @@ const APPOINTMENT_ID_TYPE_OPTIONS = [
   "Other Government ID",
 ];
 
-const OCR_SPACE_API_URL = "https://api.ocr.space/parse/image";
-const REQUIRE_OCR_ID_VALIDATION =
-  String(process.env.REQUIRE_OCR_ID_VALIDATION || "").trim().toLowerCase() === "true";
 
 const GENERIC_AUTH_ERROR_MESSAGE = "Invalid email or password";
 const GENERIC_PASSWORD_RESET_REQUEST_MESSAGE =
@@ -221,266 +220,12 @@ const ensureSafePassAccountId = async (user) => {
   return user.safePassId;
 };
 
-const reviewAppointmentIdImage = ({ idType, idImage, idVerification }) => {
-  const normalizedIdType = String(idType || "").trim();
-  const normalizedIdImage = String(idImage || "").trim();
-  const normalizedVerificationStatus = String(idVerification?.status || "").trim();
-  const verificationConfidence = Number(idVerification?.confidence);
-
-  if (!normalizedIdType) {
-    return {
-      isAccepted: false,
-      status: "missing_id_type",
-      message: "Please choose which valid ID you will present.",
-    };
-  }
-
-  if (!normalizedIdImage) {
-    return {
-      isAccepted: true,
-      status: "physical_id_required",
-      message: `${normalizedIdType} will be presented at campus entry for manual verification.`,
-    };
-  }
-
-  const looksLikeImagePayload =
-    normalizedIdImage.startsWith("data:image/") ||
-    normalizedIdImage.startsWith("file:") ||
-    normalizedIdImage.startsWith("content:") ||
-    normalizedIdImage.startsWith("http");
-
-  if (!looksLikeImagePayload || normalizedIdImage.length < 120) {
-    return {
-      isAccepted: false,
-      status: "image_quality_failed",
-      message:
-        "We could not confirm the uploaded file is a valid ID image. Please upload a clearer photo of the front of the ID.",
-    };
-  }
-
-  if (
-    normalizedVerificationStatus === "ai_precheck_failed" ||
-    normalizedVerificationStatus === "ocr_validation_failed" ||
-    normalizedVerificationStatus === "ocr_validation_error"
-  ) {
-    return {
-      isAccepted: false,
-      status: normalizedVerificationStatus,
-      message:
-        idVerification?.message ||
-        "The uploaded ID image did not pass verification. Please upload a clearer matching ID photo.",
-      confidence: Number.isFinite(verificationConfidence) ? verificationConfidence : 0,
-    };
-  }
-
-  if (
-    normalizedVerificationStatus === "ai_precheck_passed" ||
-    normalizedVerificationStatus === "ocr_validation_passed" ||
-    normalizedVerificationStatus === "ocr_manual_review_required"
-  ) {
-    return {
-      isAccepted: true,
-      status: normalizedVerificationStatus,
-      message:
-        idVerification?.message ||
-        `Uploaded ${normalizedIdType} image passed the verification pre-check. Final validation will be completed by staff or security.`,
-      confidence: Number.isFinite(verificationConfidence) ? verificationConfidence : 100,
-    };
-  }
-
-  return {
-    isAccepted: true,
-    status: "image_uploaded",
-    message: `Uploaded ${normalizedIdType} image saved. Final validation will be completed by staff or security.`,
-    confidence: null,
-  };
-};
-
 const getRequiredEnvValue = (name) => {
   const value = String(process.env[name] || "").trim();
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
-};
-
-const getOptionalEnvValue = (name) => String(process.env[name] || "").trim();
-
-const getOcrSpaceApiKey = () => getOptionalEnvValue("OCR_SPACE_API_KEY");
-
-const normalizeOcrText = (value = "") =>
-  String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const getExpectedIdKeywords = (idType = "") => {
-  const normalizedIdType = normalizeOcrText(idType);
-  if (!normalizedIdType) return [];
-
-  if (normalizedIdType.includes("national")) {
-    return ["national id", "philippine identification", "philid", "psn", "philsys"];
-  }
-  if (normalizedIdType.includes("driver")) {
-    return ["driver", "license", "licence", "lto", "driver s license"];
-  }
-  if (normalizedIdType.includes("passport")) {
-    return ["passport", "republic of the philippines", "passeport"];
-  }
-  if (normalizedIdType.includes("umid")) {
-    return ["umid", "unified multi purpose", "crn"];
-  }
-  if (normalizedIdType.includes("philhealth")) {
-    return ["philhealth", "health insurance"];
-  }
-  if (normalizedIdType.includes("voter")) {
-    return ["voter", "commission on elections", "comelec"];
-  }
-  if (normalizedIdType.includes("prc")) {
-    return ["professional regulation commission", "prc"];
-  }
-  if (normalizedIdType.includes("postal")) {
-    return ["postal", "phlpost"];
-  }
-  if (normalizedIdType.includes("senior")) {
-    return ["senior citizen", "osca"];
-  }
-  if (normalizedIdType.includes("school")) {
-    return ["school", "student", "college", "university", "academy"];
-  }
-  if (normalizedIdType.includes("company")) {
-    return ["company", "employee", "corporation", "inc"];
-  }
-  if (normalizedIdType.includes("government")) {
-    return ["government", "republic of the philippines", "agency"];
-  }
-
-  return normalizedIdType.split(" ").filter((part) => part.length >= 3);
-};
-
-const getConflictingIdKeywords = (idType = "") => {
-  const normalizedIdType = normalizeOcrText(idType);
-  const groups = [
-    { key: "national", keywords: ["national id", "philippine identification", "philid", "philsys"] },
-    { key: "driver", keywords: ["driver", "license", "licence", "lto"] },
-    { key: "passport", keywords: ["passport"] },
-    { key: "umid", keywords: ["umid", "unified multi purpose", "crn"] },
-    { key: "philhealth", keywords: ["philhealth"] },
-    { key: "voter", keywords: ["voter", "comelec"] },
-    { key: "prc", keywords: ["professional regulation commission", "prc"] },
-    { key: "postal", keywords: ["postal", "phlpost"] },
-  ];
-
-  const selectedGroup = groups.find((group) => normalizedIdType.includes(group.key));
-  return groups
-    .filter((group) => group.key !== selectedGroup?.key)
-    .flatMap((group) => group.keywords);
-};
-
-const scoreOcrIdMatch = ({ idType, rawText }) => {
-  const normalizedText = normalizeOcrText(rawText);
-  const expectedKeywords = getExpectedIdKeywords(idType);
-  const conflictingKeywords = getConflictingIdKeywords(idType);
-  const matchedKeywords = expectedKeywords.filter((keyword) =>
-    normalizedText.includes(normalizeOcrText(keyword)),
-  );
-  const conflictingMatches = conflictingKeywords.filter((keyword) =>
-    normalizedText.includes(normalizeOcrText(keyword)),
-  );
-  const hasMeaningfulText = normalizedText.length >= 20;
-  const hasExpectedMatch = matchedKeywords.length > 0;
-  const hasConflict = conflictingMatches.length > 0 && !hasExpectedMatch;
-  const confidence = Math.max(
-    0,
-    Math.min(
-      100,
-      (hasMeaningfulText ? 35 : 0) +
-        Math.min(matchedKeywords.length * 35, 55) -
-        (hasConflict ? 45 : 0),
-    ),
-  );
-
-  return {
-    hasMeaningfulText,
-    hasExpectedMatch,
-    hasConflict,
-    confidence,
-    matchedKeywords,
-    conflictingMatches,
-  };
-};
-
-const parseOcrSpaceResult = (data) => {
-  const parsedResults = Array.isArray(data?.ParsedResults) ? data.ParsedResults : [];
-  return parsedResults
-    .map((result) => String(result?.ParsedText || "").trim())
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-};
-
-const callOcrSpace = async ({ imageUri }) => {
-  const apiKey = getOcrSpaceApiKey();
-  if (!apiKey) {
-    return {
-      success: false,
-      skipped: true,
-      message: "OCR Space API key is not configured on the backend.",
-    };
-  }
-
-  const payload = new URLSearchParams({
-    apikey: apiKey,
-    language: "eng",
-    isOverlayRequired: "false",
-    detectOrientation: "true",
-    scale: "true",
-    OCREngine: "2",
-  });
-
-  const normalizedImage = String(imageUri || "").trim();
-  if (normalizedImage.startsWith("data:image/")) {
-    payload.set("base64Image", normalizedImage);
-  } else {
-    payload.set("url", normalizedImage);
-  }
-
-  const response = await fetch(OCR_SPACE_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body: payload.toString(),
-  });
-  const responseText = await response.text();
-  let data = null;
-  try {
-    data = responseText ? JSON.parse(responseText) : null;
-  } catch {
-    data = { raw: responseText };
-  }
-
-  if (!response.ok || data?.IsErroredOnProcessing) {
-    const providerError = Array.isArray(data?.ErrorMessage)
-      ? data.ErrorMessage.join(" ")
-      : data?.ErrorMessage;
-    return {
-      success: false,
-      message:
-        providerError ||
-        data?.ErrorDetails ||
-        `OCR Space request failed with HTTP ${response.status}.`,
-      data,
-    };
-  }
-
-  return {
-    success: true,
-    text: parseOcrSpaceResult(data),
-    data,
-  };
 };
 
 const logSensitiveDebug = (...args) => {
@@ -10769,126 +10514,71 @@ app.get("/api/visitors/:id/logs", authMiddleware, async (req, res) => {
   }
 });
 
-// Visitor appointment ID OCR validation
+// Visitor appointment ID pre-check (retains the existing frontend route).
 app.post("/api/appointments/id-ocr/validate", authMiddleware, async (req, res) => {
   try {
-    const { idType, imageUri } = req.body || {};
+    const { idType, imageUri, backImageUri = "" } = req.body || {};
     const normalizedIdType = String(idType || "").trim();
-    const normalizedImageUri = String(imageUri || "").trim();
 
-    if (!normalizedIdType) {
+    if (!normalizedIdType || !isAllowedOption(normalizedIdType, APPOINTMENT_ID_TYPE_OPTIONS)) {
       return res.status(400).json({
         success: false,
         isValid: false,
         status: "missing_id_type",
         confidence: 0,
-        message: "Choose the valid ID type before scanning.",
+        message: "Choose a valid ID type before scanning.",
       });
     }
 
-    if (!normalizedImageUri) {
+    let frontImage;
+    let backImage = "";
+    try {
+      frontImage = parseIdImage(imageUri, "Front");
+      if (backImageUri != null && backImageUri !== "") backImage = parseIdImage(backImageUri, "Back");
+    } catch (validationError) {
       return res.status(400).json({
         success: false,
         isValid: false,
-        status: "missing_image",
+        status: "invalid_image",
         confidence: 0,
-        message: "Upload a clear ID image before scanning.",
+        message: validationError.message,
       });
     }
 
-    if (
-      !normalizedImageUri.startsWith("data:image/") &&
-      !normalizedImageUri.startsWith("http://") &&
-      !normalizedImageUri.startsWith("https://")
-    ) {
-      return res.status(400).json({
-        success: false,
-        isValid: false,
-        status: "unsupported_image_source",
-        confidence: 0,
-        message: "Please upload the ID photo from your device before scanning.",
-      });
-    }
-
-    const ocrResult = await callOcrSpace({ imageUri: normalizedImageUri });
-    if (!ocrResult.success) {
-      const status =
-        !REQUIRE_OCR_ID_VALIDATION
-          ? "ocr_manual_review_required"
-          : "ocr_validation_error";
-      const responseStatus = !REQUIRE_OCR_ID_VALIDATION ? 200 : 502;
-      return res.status(responseStatus).json({
-        success: !REQUIRE_OCR_ID_VALIDATION,
-        isValid: !REQUIRE_OCR_ID_VALIDATION,
-        status,
-        confidence: 0,
-        message:
-          !REQUIRE_OCR_ID_VALIDATION
-            ? "OCR verification is unavailable right now. You can continue; staff or security will complete the final ID review."
-            : ocrResult.message ||
-              "OCR verification is unavailable right now. Please try again later.",
-        checkedAt: new Date().toISOString(),
-      });
-    }
-
-    const match = scoreOcrIdMatch({
-      idType: normalizedIdType,
-      rawText: ocrResult.text,
-    });
-    const isExactMatch = match.hasMeaningfulText && match.hasExpectedMatch && !match.hasConflict;
-    const needsManualReview = match.hasMeaningfulText && !match.hasConflict && !match.hasExpectedMatch;
-    const isValid = isExactMatch || needsManualReview;
-    const hasReadableButWrongType =
-      match.hasMeaningfulText && !match.hasExpectedMatch && match.conflictingMatches.length > 0;
+    const rawResult = await verifyID(frontImage, backImage);
+    const result = mapIdAnalyzerDecision(rawResult);
+    const verificationProof = result.decision === "accept"
+      ? issueIdVerificationProof({
+          userId: req.user._id,
+          idType: normalizedIdType,
+          decision: result.decision,
+          frontImage,
+          backImage,
+          secret: getRequiredEnvValue("JWT_SECRET"),
+        })
+      : null;
 
     return res.json({
       success: true,
-      isValid,
-      status: isExactMatch
-        ? "ocr_validation_passed"
-        : needsManualReview
-          ? "ocr_manual_review_required"
-          : "ocr_validation_failed",
-      confidence: match.confidence,
+      isValid: result.isValid,
+      status: result.status,
+      verificationStatus: result.verificationStatus,
+      confidence: 0,
       idType: normalizedIdType,
       checkedAt: new Date().toISOString(),
-      message: isExactMatch
-        ? `${normalizedIdType} passed OCR verification. Staff or security will still complete the final review.`
-        : needsManualReview
-          ? `Readable ID text was detected, but OCR could not confidently match it to ${normalizedIdType}. You can continue; staff or security will complete the final review.`
-        : hasReadableButWrongType
-          ? `The uploaded ID appears to be a different ID type. Please upload a ${normalizedIdType}.`
-          : "OCR could not read enough ID text. Please upload a brighter front photo or try a closer crop of the ID.",
-      checks: [
-        {
-          key: "ocr_text",
-          passed: match.hasMeaningfulText,
-          label: "Readable ID text detected",
-        },
-        {
-          key: "id_type_match",
-          passed: match.hasExpectedMatch,
-          label: "Detected ID type matches selection",
-        },
-        {
-          key: "no_conflicting_id_type",
-          passed: !match.hasConflict,
-          label: "No conflicting ID type detected",
-        },
-      ],
-      details: {
-        matchedKeywords: match.matchedKeywords,
-        conflictingMatches: match.conflictingMatches,
-      },
+      message: result.message,
+      checks: [{ key: "document_precheck", passed: result.isValid, label: "Document pre-check completed" }],
+      verificationProof,
     });
   } catch (error) {
-    console.error("OCR ID validation error:", error);
-    res.status(500).json({
+    // SDK errors may contain request data; never log the error object or raw response.
+    console.error("ID Analyzer appointment pre-check failed.");
+    res.status(502).json({
       success: false,
       isValid: false,
-      status: "ocr_validation_error",
+      status: "ai_precheck_error",
       confidence: 0,
-      message: "Failed to validate the ID image. Please try again.",
+      message: "ID verification is unavailable right now. Please try again later or present your ID at the gate.",
     });
   }
 });
@@ -11091,8 +10781,7 @@ app.put("/api/visitors/:userId/visit", authMiddleware, async (req, res) => {
       appointmentDepartment,
       idType,
       idNumber,
-      idImage,
-      idVerification,
+      verificationProof,
       dataPrivacyAccepted,
       dataPrivacyAcceptedAt,
     } = req.body || {};
@@ -11195,7 +10884,6 @@ app.put("/api/visitors/:userId/visit", authMiddleware, async (req, res) => {
     }
 
     const normalizedIdType = String(idType || idNumber || "").trim();
-    const normalizedIdImage = String(idImage || "").trim();
 
     if (!normalizedIdType) {
       return res.status(400).json({
@@ -11218,28 +10906,13 @@ app.put("/api/visitors/:userId/visit", authMiddleware, async (req, res) => {
       });
     }
 
-    let idReview = reviewAppointmentIdImage({
+    const idReview = buildAppointmentIdReview({
       idType: normalizedIdType,
-      idImage: normalizedIdImage,
-      idVerification:
-        idVerification ||
-        (!normalizedIdImage
-          ? {
-              status: "physical_id_required",
-              isValid: true,
-              message: `${normalizedIdType} will be presented at campus entry for manual verification.`,
-            }
-          : null),
+      proof: verificationProof,
+      authenticatedUserId: req.user._id,
+      appointmentUserId: requestedUserId,
+      secret: getRequiredEnvValue("JWT_SECRET"),
     });
-
-    if (!idReview.isAccepted) {
-      return res.status(400).json({
-        success: false,
-        code: "ID_PRECHECK_FAILED",
-        idValidationStatus: idReview.status,
-        message: idReview.message,
-      });
-    }
 
     const user = await User.findById(requestedUserId);
     if (!user) {
@@ -11310,14 +10983,12 @@ app.put("/api/visitors/:userId/visit", authMiddleware, async (req, res) => {
         email: user.email,
         phoneNumber: user.phone || "Not provided",
         idType: normalizedIdType,
-        idNumber: normalizedIdType,
-        idImage: normalizedIdImage,
+        idNumber: "",
+        idImage: null,
         idValidationStatus: idReview.status,
         idValidationNotes: idReview.message,
-        idValidationConfidence: idReview.confidence,
-        idValidationCheckedAt: idVerification?.checkedAt
-          ? new Date(idVerification.checkedAt)
-          : new Date(),
+        idValidationConfidence: null,
+        idValidationCheckedAt: idReview.checkedAt,
         dataPrivacyAccepted: true,
         dataPrivacyAcceptedAt: dataPrivacyAcceptedAt
           ? new Date(dataPrivacyAcceptedAt)

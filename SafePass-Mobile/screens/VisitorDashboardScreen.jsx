@@ -25,6 +25,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from 'expo-haptics';
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import ApiService from "../utils/ApiService";
 import IDScannerService from "../utils/IDScannerService";
 import {
@@ -642,6 +643,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
   const [isSubmittingAppointment, setIsSubmittingAppointment] = useState(false);
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState(false);
   const [isVerifyingAppointmentId, setIsVerifyingAppointmentId] = useState(false);
+  const appointmentIdRevisionRef = useRef(0);
   const [isSendingLateNotice, setIsSendingLateNotice] = useState(false);
   const [isVirtualTapLoading, setIsVirtualTapLoading] = useState(false);
   const [isCheckInLoading, setIsCheckInLoading] = useState(false);
@@ -667,7 +669,9 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     customPurpose: "",
     idType: "",
     idImage: null,
+    backIdImage: null,
     idVerification: null,
+    verificationProof: null,
     privacyAccepted: false,
   });
   const [appointmentEditForm, setAppointmentEditForm] = useState({
@@ -2998,60 +3002,87 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       customPurpose: "",
       idType: getStoredVisitorIdType(visitorRecord),
       idImage: null,
+      backIdImage: null,
       idVerification: null,
+      verificationProof: null,
       privacyAccepted: false,
     };
   };
 
   const populateAppointmentForm = (visitorRecord = visitor) => {
+    appointmentIdRevisionRef.current += 1;
     setAppointmentForm(buildAppointmentForm(visitorRecord));
     setHasAppointmentDraft(false);
   };
 
-  const processAppointmentIdImageAsset = async (asset) => {
-    if (!asset?.uri) return;
-
-    const imageValue = asset.base64
-      ? `data:${asset.mimeType || "image/jpeg"};base64,${asset.base64}`
-      : asset.uri;
-
+  const verifyAppointmentIdImages = async ({ idType, idImage, backIdImage = "", revision }) => {
+    if (!idType || !idImage) return;
     setIsVerifyingAppointmentId(true);
+    setAppointmentForm((prev) => ({ ...prev, idVerification: {
+      status: "scanning", verificationStatus: "scanning", message: "Checking your ID image...",
+    }, verificationProof: null }));
+    try {
+      const verification = await IDScannerService.verifyIDImage({
+        idType, imageUri: idImage, backImageUri: backIdImage,
+      });
+      if (appointmentIdRevisionRef.current !== revision) return;
+      setAppointmentForm((prev) => ({
+        ...prev,
+        idVerification: verification,
+        verificationProof: verification.verificationStatus === "precheck_passed"
+          ? verification.verificationProof || null : null,
+      }));
+    } finally {
+      if (appointmentIdRevisionRef.current === revision) setIsVerifyingAppointmentId(false);
+    }
+  };
+
+  const processAppointmentIdImageAsset = async (asset, side = "front", selectionRevision) => {
+    if (!asset?.uri) {
+      showVisitorAlert("Upload Failed", "Could not read this image. Please try another photo.");
+      return;
+    }
+
+    // Normalize gallery formats (including HEIC) and keep the request below the server's 4 MB limit.
+    const prepared = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      [{ resize: { width: 1600 } }],
+      { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    if (!prepared.base64 || prepared.base64.length > Math.ceil((4 * 1024 * 1024) / 3) * 4) {
+      showVisitorAlert("Photo Too Large", "Choose a smaller or clearer ID photo and try again.");
+      return;
+    }
+    if (appointmentIdRevisionRef.current !== selectionRevision) return;
+    const imageValue = `data:image/jpeg;base64,${prepared.base64}`;
+    const revision = ++appointmentIdRevisionRef.current;
+    const idType = appointmentForm.idType;
+    const idImage = side === "front" ? imageValue : appointmentForm.idImage;
+    const backIdImage = side === "back" ? imageValue : null;
+
     setHasAppointmentDraft(true);
     setAppointmentForm((prev) => ({
       ...prev,
-      idImage: imageValue,
-      idVerification: {
-        status: "scanning",
-        confidence: 0,
-        message: "Scanning your valid ID image...",
-      },
+      idImage,
+      backIdImage,
+      idVerification: null,
+      verificationProof: null,
     }));
-
-    const verification = await IDScannerService.verifyIDImage({
-      imageUri: imageValue,
-      idType: appointmentForm.idType,
-    });
-
-    setAppointmentForm((prev) => ({
-      ...prev,
-      idImage: imageValue,
-      idVerification: verification,
-    }));
-
-    showVisitorAlert(
-      verification?.isValid ? "ID Pre-check Passed" : "ID Needs a Clearer Photo",
-      verification?.message ||
-        `Your ${appointmentForm.idType} picture was saved. Please make sure the uploaded photo matches the ID type you selected.`,
-    );
+    await verifyAppointmentIdImages({ idType, idImage, backIdImage, revision });
   };
 
-  const selectAppointmentIdImage = async (source = "gallery") => {
+  const selectAppointmentIdImage = async (source = "gallery", side = "front") => {
     try {
+      const selectionRevision = appointmentIdRevisionRef.current;
       if (!appointmentForm.idType) {
         showVisitorAlert(
           "Choose ID Type First",
           "Please choose which valid ID you will present before uploading its picture.",
         );
+        return;
+      }
+      if (side === "back" && !appointmentForm.idImage) {
+        showVisitorAlert("Front Photo Needed", "Add the front of your ID first.");
         return;
       }
 
@@ -3073,7 +3104,6 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         quality: 0.75,
-        base64: true,
       };
       const result = isCameraSource
         ? await ImagePicker.launchCameraAsync(pickerOptions)
@@ -3082,68 +3112,22 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       if (result.canceled) return;
 
       const asset = result.assets?.[0];
-      await processAppointmentIdImageAsset(asset);
+      await processAppointmentIdImageAsset(asset, side, selectionRevision);
     } catch (error) {
-      console.error("Pick appointment ID image error:", error);
+      console.error("Pick appointment ID image error.");
       showVisitorAlert("Upload Failed", "Unable to prepare the ID image. Please try again.");
-    } finally {
-      setIsVerifyingAppointmentId(false);
     }
-  };
-
-  const handlePickAppointmentIdImage = async () => {
-    if (Platform.OS === "web") {
-      await selectAppointmentIdImage("gallery");
-      return;
-    }
-
-    showVisitorAlert(
-      "Valid ID Picture",
-      "Choose how you want to add your valid ID picture.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Take Photo", onPress: () => selectAppointmentIdImage("camera") },
-        { text: "Choose from Gallery", onPress: () => selectAppointmentIdImage("gallery") },
-      ],
-    );
   };
 
   const handleVerifyAppointmentIdAgain = async () => {
     if (!appointmentForm.idType || !appointmentForm.idImage || isVerifyingAppointmentId) return;
-
-    setIsVerifyingAppointmentId(true);
-    setAppointmentForm((prev) => ({
-      ...prev,
-      idVerification: {
-        status: "scanning",
-        confidence: 0,
-        message: "Scanning your valid ID image...",
-      },
-    }));
-
-    try {
-      const verification = await IDScannerService.verifyIDImage({
-        imageUri: appointmentForm.idImage,
-        idType: appointmentForm.idType,
-      });
-      setAppointmentForm((prev) => ({
-        ...prev,
-        idVerification: verification,
-      }));
-    } catch (error) {
-      console.error("Appointment ID re-scan error:", error);
-      setAppointmentForm((prev) => ({
-        ...prev,
-        idVerification: {
-          isValid: false,
-          status: "ai_precheck_error",
-          confidence: 0,
-          message: "Unable to scan this ID image. Please upload a clearer image and try again.",
-        },
-      }));
-    } finally {
-      setIsVerifyingAppointmentId(false);
-    }
+    const revision = ++appointmentIdRevisionRef.current;
+    await verifyAppointmentIdImages({
+      idType: appointmentForm.idType,
+      idImage: appointmentForm.idImage,
+      backIdImage: appointmentForm.backIdImage,
+      revision,
+    });
   };
 
   const openAppointmentRequestScreen = () => {
@@ -3288,6 +3272,11 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
     appointmentSubmitInFlightRef.current = true;
     setIsSubmittingAppointment(true);
     const submittedAt = new Date();
+    const hasFreshPrecheck = Boolean(
+      appointmentForm.verificationProof &&
+      appointmentForm.idVerification?.verificationStatus === "precheck_passed" &&
+      Date.now() - Date.parse(appointmentForm.idVerification.checkedAt || "") < 10 * 60 * 1000,
+    );
     try {
       const response = await ApiService.requestVisitorAppointment(currentUser._id, {
         preferredDate: new Date(preferredDate).toISOString(),
@@ -3302,9 +3291,13 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         appointmentDepartment: department,
         purposeOfVisit,
         idType,
-        idNumber: idType,
         idImage: "",
-        idVerification: {
+        verificationProof: hasFreshPrecheck ? appointmentForm.verificationProof : null,
+        idVerification: hasFreshPrecheck ? {
+          status: "ai_precheck_passed",
+          isValid: true,
+          message: "ID pre-check passed. The ID will still be checked at campus entry.",
+        } : {
           status: "physical_id_required",
           isValid: true,
           message: `${idType} will be presented at campus entry for manual verification.`,
@@ -3314,6 +3307,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       });
 
       if (response?.success) {
+        appointmentIdRevisionRef.current += 1;
         const afterHoursNotice = getAppointmentAfterHoursNotice(response, submittedAt);
         const feedbackMessage = afterHoursNotice?.message ||
           "Your new visit request has been sent to staff for review. You can track approval, time adjustments, or rejection updates from this dashboard.";
@@ -3331,7 +3325,6 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           assignedOffice: department,
           host: department,
           idType,
-          idNumber: idType,
           idImage: "",
           idVerification: {
             status: "physical_id_required",
@@ -6262,15 +6255,15 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
                       ]}
                       onPress={() => {
                         setHasAppointmentDraft(true);
+                        appointmentIdRevisionRef.current += 1;
+                        setIsVerifyingAppointmentId(false);
                         setAppointmentForm((prev) => ({
                           ...prev,
                           idType: option,
                           idImage: null,
-                          idVerification: {
-                            status: "physical_id_required",
-                            isValid: true,
-                            message: `${option} will be presented at campus entry for manual verification.`,
-                          },
+                          backIdImage: null,
+                          idVerification: null,
+                          verificationProof: null,
                         }));
                         setShowIdTypeDropdown(false);
                       }}
@@ -6299,20 +6292,48 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           </View>
 
           <View style={[visitorDashboardStyles.appointmentField, appointmentFormColumnResponsiveStyle]}>
-            <Text style={[visitorDashboardStyles.appointmentFieldLabel, isVisitorDarkMode && visitorDashboardStyles.darkKickerText]}>Campus Entry ID Check</Text>
+            <Text style={[visitorDashboardStyles.appointmentFieldLabel, isVisitorDarkMode && visitorDashboardStyles.darkKickerText]}>Identity Verification</Text>
             <View style={[visitorDashboardStyles.appointmentIdUploadCard, isVisitorDarkMode && visitorDashboardStyles.darkUploadCard]}>
               <View style={visitorDashboardStyles.appointmentIdPlaceholder}>
                 <Ionicons name="shield-checkmark-outline" size={28} color="#0A3D91" />
                 <Text style={[visitorDashboardStyles.appointmentIdPlaceholderTitle, isVisitorDarkMode && visitorDashboardStyles.darkPrimaryText]}>
-                  Present your selected ID at the gate
+                  {appointmentForm.idVerification?.verificationStatus === "precheck_passed"
+                    ? "ID pre-check passed"
+                    : appointmentForm.idVerification?.verificationStatus === "needs_review"
+                    ? "ID requires manual review"
+                    : appointmentForm.idVerification?.verificationStatus === "rejected"
+                    ? "ID could not be verified"
+                    : isVerifyingAppointmentId ? "Checking your ID..." : "Optional ID pre-check"}
                 </Text>
                 <Text style={[visitorDashboardStyles.appointmentIdPlaceholderText, isVisitorDarkMode && visitorDashboardStyles.darkMutedText]}>
-                  No upload is needed. Bring the same ID type you selected so security can verify it before entry.
+                  {appointmentForm.idVerification?.message || "Take a photo or choose one from your gallery. You can also bring your selected ID to the gate for manual review."}
                 </Text>
+                {isVerifyingAppointmentId ? <ActivityIndicator color="#0A3D91" /> : null}
+                <TouchableOpacity style={visitorDashboardStyles.appointmentChangeIdButton} accessibilityRole="button" onPress={() => selectAppointmentIdImage("camera", "front")} disabled={isVerifyingAppointmentId}>
+                  <Text style={visitorDashboardStyles.appointmentChangeIdText}>Take Photo (Front)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={visitorDashboardStyles.appointmentChangeIdButton} accessibilityRole="button" onPress={() => selectAppointmentIdImage("gallery", "front")} disabled={isVerifyingAppointmentId}>
+                  <Text style={visitorDashboardStyles.appointmentChangeIdText}>{appointmentForm.idImage ? "Replace Front From Gallery" : "Choose From Gallery"}</Text>
+                </TouchableOpacity>
+                {appointmentForm.idImage ? (
+                  <>
+                    <TouchableOpacity style={visitorDashboardStyles.appointmentChangeIdButton} accessibilityRole="button" onPress={() => selectAppointmentIdImage("camera", "back")} disabled={isVerifyingAppointmentId}>
+                      <Text style={visitorDashboardStyles.appointmentChangeIdText}>Take Photo (Back, Optional)</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={visitorDashboardStyles.appointmentChangeIdButton} accessibilityRole="button" onPress={() => selectAppointmentIdImage("gallery", "back")} disabled={isVerifyingAppointmentId}>
+                      <Text style={visitorDashboardStyles.appointmentChangeIdText}>{appointmentForm.backIdImage ? "Replace Back From Gallery" : "Choose Back From Gallery (Optional)"}</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+                {appointmentForm.idImage && !isVerifyingAppointmentId ? (
+                  <TouchableOpacity style={visitorDashboardStyles.appointmentChangeIdButton} accessibilityRole="button" onPress={handleVerifyAppointmentIdAgain}>
+                    <Text style={visitorDashboardStyles.appointmentChangeIdText}>Retry ID pre-check</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             </View>
             <Text style={[visitorDashboardStyles.appointmentAutoHint, isVisitorDarkMode && visitorDashboardStyles.darkMutedText]}>
-              Your appointment request will store the ID type only. The actual ID is checked manually when you arrive.
+              Present physical ID at gate. Upload is optional; bring the selected ID to campus for security to check. Your ID photo is not sent with the appointment request.
             </Text>
           </View>
           </View>
