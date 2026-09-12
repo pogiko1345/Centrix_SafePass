@@ -5142,12 +5142,12 @@ export default StyleSheet.create({
 
   mobileTimeSlotGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
+    paddingRight: 8,
   },
 
   mobileTimeSlotButton: {
-    width: "31%",
+    width: 108,
     minHeight: 54,
     borderRadius: 8,
     borderWidth: 1,

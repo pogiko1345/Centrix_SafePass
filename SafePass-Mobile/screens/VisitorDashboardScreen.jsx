@@ -2597,6 +2597,13 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           {isLoadingAppointmentSlots ? <ActivityIndicator size="small" color="#0A3D91" /> : null}
         </View>
 
+        <View style={visitorDashboardStyles.mobileSelectedSlotRow}>
+          <Text style={visitorDashboardStyles.mobileSelectedSlotLabel}>Selected date and time</Text>
+          <Text style={visitorDashboardStyles.mobileSelectedSlotValue}>
+            {selectedDateLabel} · {selectedTimeLabel}
+          </Text>
+        </View>
+
         <View style={visitorDashboardStyles.mobileCalendarCard}>
           <View style={visitorDashboardStyles.mobileCalendarHeader}>
             <Text style={visitorDashboardStyles.mobileCalendarMonth}>
@@ -2651,10 +2658,11 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
         </View>
 
         <View style={visitorDashboardStyles.mobileTimeGroupList}>
+          <Text style={visitorDashboardStyles.mobileSlotPickerHint}>Swipe sideways to see more times.</Text>
           {getAppointmentTimeGroups().map((group) => (
             <View key={group.label} style={visitorDashboardStyles.mobileTimeGroup}>
               <Text style={visitorDashboardStyles.mobileTimeGroupLabel}>{group.label}</Text>
-              <View style={visitorDashboardStyles.mobileTimeSlotGrid}>
+              <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={visitorDashboardStyles.mobileTimeSlotGrid}>
                 {group.options.map((option) => {
                   const isSelected = isSameAppointmentTime(option, selectedTime);
                   const isFull = isAppointmentTimeSlotFull(option);
@@ -2695,7 +2703,7 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
                     </TouchableOpacity>
                   );
                 })}
-              </View>
+              </ScrollView>
             </View>
           ))}
         </View>
@@ -2715,12 +2723,6 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
           </View>
         </View>
 
-        <View style={visitorDashboardStyles.mobileSelectedSlotRow}>
-          <Text style={visitorDashboardStyles.mobileSelectedSlotLabel}>Appointment Time</Text>
-          <Text style={visitorDashboardStyles.mobileSelectedSlotValue}>
-            {selectedTimeLabel} - {selectedDateLabel}
-          </Text>
-        </View>
       </View>
     );
   };
@@ -5851,9 +5853,9 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
             ))}
           </View>
 
-          {Platform.OS === "web" ? (
+          {Platform.OS === "web" && isWideAppointmentView ? (
             renderWebAppointmentDateTimePicker()
-          ) : isCompactVisitorDashboard ? (
+          ) : Platform.OS === "web" || isCompactVisitorDashboard ? (
             renderMobileAppointmentSlotPicker()
           ) : (
             <View style={appointmentFormRowResponsiveStyle}>

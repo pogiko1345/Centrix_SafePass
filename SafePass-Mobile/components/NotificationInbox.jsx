@@ -9,12 +9,15 @@ export default function NotificationInbox({ currentUser }) {
   const [notices, setNotices] = useState([]);
   const [open, setOpen] = useState(false);
   const [banner, setBanner] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   useEffect(() => {
     let disposed = false, busy = false, userId = '', stopPush = () => {};
     let seen = new Set();
     const unsubscribeLogout = subscribeNotificationLogout(() => {
       disposed = true; stopPush();
-      setAccount(null); setNotices([]); setBanner(null); setOpen(false);
+      setAccount(null); setNotices([]); setBanner(null); setOpen(false); setHistory([]);
       clearDeliveredNotifications().catch(() => {});
     });
     const refresh = async () => {
@@ -27,7 +30,7 @@ export default function NotificationInbox({ currentUser }) {
         if (nextId !== userId) {
           stopPush();
           userId = nextId; seen = new Set();
-          setAccount(user); setNotices([]); setBanner(null); setOpen(false);
+          setAccount(user); setNotices([]); setBanner(null); setOpen(false); setHistory([]);
           if (userId) stopPush = await startPushNotifications(ApiService, userId, (_data, opened) => {
             emitNotificationUpdate();
             if (opened) setOpen(true);
@@ -59,12 +62,28 @@ export default function NotificationInbox({ currentUser }) {
     const timer = setTimeout(() => setBanner(null), 8000);
     return () => clearTimeout(timer);
   }, [banner]);
+  useEffect(() => {
+    if (!open || !account?._id) return undefined;
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError('');
+    ApiService.getNotifications({ limit: 100 }).then(async (result) => {
+      if (cancelled || String((await ApiService.getCurrentUser())?._id || '') !== String(account._id)) return;
+      setHistory(Array.isArray(result?.notifications) ? result.notifications : []);
+    }).catch(() => {
+      if (!cancelled) setHistoryError('Could not load notifications. Please try again.');
+    }).finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, account?._id]);
   if (!account) return null;
   const read = async (notice) => {
     if (String((await ApiService.getCurrentUser())?._id) !== String(account._id)) return;
     try {
       await ApiService.markNotificationAsRead(notice._id);
       setNotices((rows) => rows.filter((row) => row._id !== notice._id));
+      setHistory((rows) => rows.map((row) => row._id === notice._id
+        ? { ...row, readBy: [...(row.readBy || []), { user: account._id }] }
+        : row));
       emitNotificationUpdate();
     } catch { /* Keep the unread item available for retry. */ }
   };
@@ -78,17 +97,34 @@ export default function NotificationInbox({ currentUser }) {
       style={{ position: 'absolute', right: 16, bottom: 88, borderRadius: 24, backgroundColor: '#0A3D91', padding: 12, elevation: 6 }}>
       <Text style={{ color: 'white', fontWeight: '700' }}>Notifications{notices.length ? ` (${notices.length})` : ''}</Text>
     </TouchableOpacity>
-    <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
-      <View style={{ flex: 1, backgroundColor: '#F8FAFC', paddingTop: 48, paddingHorizontal: 20, paddingBottom: 24 }}>
-        <Text style={{ fontSize: 24, fontWeight: '700', color: '#0F172A' }}>Notifications</Text>
-        <TouchableOpacity onPress={() => setOpen(false)} style={{ paddingVertical: 16 }}><Text style={{ color: '#0A3D91' }}>Close</Text></TouchableOpacity>
-        <ScrollView>{notices.length === 0 && <Text>No unread notifications.</Text>}
-          {notices.map((notice) => <View key={notice._id} style={{ backgroundColor: 'white', padding: 16, borderRadius: 12, marginBottom: 12 }}>
-            <Text style={{ fontWeight: '700', color: '#0F172A' }}>{notice.title}</Text>
-            <Text style={{ marginVertical: 8, color: '#334155' }}>{notice.message}</Text>
-            <TouchableOpacity onPress={() => read(notice)} style={{ paddingVertical: 8 }}><Text style={{ color: '#0A3D91' }}>Mark as read</Text></TouchableOpacity>
-          </View>)}
-        </ScrollView>
+    <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.55)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+        <View style={{ width: '100%', maxWidth: 520, maxHeight: '85%', backgroundColor: '#F8FAFC', borderRadius: 20, padding: 20 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <View>
+              <Text style={{ fontSize: 22, fontWeight: '700', color: '#0F172A' }}>Notifications</Text>
+              <Text style={{ color: '#64748B', marginTop: 4 }}>{notices.length} unread</Text>
+            </View>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close notifications" onPress={() => setOpen(false)} style={{ padding: 10 }}>
+              <Text style={{ color: '#0A3D91', fontWeight: '700' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
+            {historyLoading && !history.length ? <Text style={{ color: '#475569' }}>Loading notifications…</Text> : null}
+            {historyError ? <Text style={{ color: '#B42318', marginBottom: 12 }}>{historyError}</Text> : null}
+            {!historyLoading && !historyError && history.length === 0 ? <Text style={{ color: '#475569' }}>No notifications yet.</Text> : null}
+            {history.map((notice) => {
+              const unread = !notice.readBy?.some((entry) => String(entry.user?._id || entry.user) === String(account._id));
+              return <View key={notice._id} style={{ backgroundColor: 'white', borderWidth: 1, borderColor: unread ? '#B8CFF5' : '#E2E8F0', padding: 16, borderRadius: 12, marginBottom: 10 }}>
+                <Text style={{ fontWeight: '700', color: '#0F172A' }}>{notice.title}</Text>
+                <Text style={{ marginTop: 6, color: '#334155', lineHeight: 20 }}>{notice.message}</Text>
+                {unread ? <TouchableOpacity accessibilityRole="button" onPress={() => read(notice)} style={{ paddingTop: 12, paddingBottom: 4 }}>
+                  <Text style={{ color: '#0A3D91', fontWeight: '700' }}>Mark as read</Text>
+                </TouchableOpacity> : <Text style={{ color: '#64748B', marginTop: 10, fontSize: 12 }}>Read</Text>}
+              </View>;
+            })}
+          </ScrollView>
+        </View>
       </View>
     </Modal>
   </>;
