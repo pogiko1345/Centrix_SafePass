@@ -933,21 +933,6 @@ const AdminThemeToggle = ({ isDarkMode, onToggle, compact = false }) => (
 );
 
 const ADMIN_MAP_FLOORS = ADMIN_MODULE_FLOORS;
-const ADMIN_MAP_ACTIVITY_TYPES = new Set([
-  "visitor_registration_request",
-  "visitor_appointment_request",
-  "admin_approved_registration",
-  "admin_rejected_registration",
-  "staff_approved_appointment",
-  "staff_adjusted_appointment",
-  "staff_rejected_appointment",
-  "staff_completed_appointment",
-  "security_checkin",
-  "visitor_self_checkin",
-  "security_checkout",
-  "visitor_self_checkout",
-]);
-
 const clampValue = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const normalizeMonitoringFloor = (floorId) => (floorId === "mezzanine" ? "first" : floorId);
@@ -984,6 +969,8 @@ const getActivityLabel = (activityType) => {
       return "Appointment Request";
     case "visitor_account_registration":
       return "Visitor Account";
+    case "visitor_registration_approved":
+      return "Registration Approved";
     case "admin_approved_registration":
       return "Admin Approval";
     case "admin_rejected_registration":
@@ -996,6 +983,18 @@ const getActivityLabel = (activityType) => {
       return "Staff Rejection";
     case "staff_completed_appointment":
       return "Appointment Complete";
+    case "staff_redirected_appointment":
+    case "staff_redirected_approved_appointment":
+    case "visitor_destination_redirected":
+      return "Office Redirected";
+    case "appointment_expired":
+      return "Appointment Expired";
+    case "appointment_no_show":
+      return "Appointment No-show";
+    case "visitor_overstay_alert":
+      return "Visitor Overstay";
+    case "wrong_office_scan":
+      return "Wrong Office Scan";
     case "security_checkin":
     case "visitor_self_checkin":
       return "Check In";
@@ -1018,12 +1017,13 @@ const getActivityMarkerStatus = (activity) => {
   return "active";
 };
 
-const getAdminMapFilterKey = (activityType) => {
+const getAdminMapFilterKey = (activityType, accessType = "") => {
   const type = String(activityType || "").toLowerCase();
-  if (type.includes("request")) return "requests";
-  if (type.includes("approve")) return "approvals";
-  if (type.includes("checkin") || type.includes("checkout")) return "movement";
-  if (type.includes("reject") || type.includes("adjust")) return "issues";
+  if (/(reject|adjust|cancel|reschedul|expired|no_show|overstay|overdue|wrong|early|invalid|reported|running_late|declined)/.test(type)) return "issues";
+  if (type.includes("redirect")) return "movement";
+  if (/(approve|accepted)/.test(type)) return "approvals";
+  if (/(request|registration)/.test(type)) return "requests";
+  if (/(checkin|checkout|tap|location|completed|redirect)/.test(type) || ["entry", "exit"].includes(accessType)) return "movement";
   return "all";
 };
 
@@ -1339,6 +1339,8 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
   const [createUserMessage, setCreateUserMessage] = useState("");
   const [createdUserSummary, setCreatedUserSummary] = useState(null);
   const [recentActivities, setRecentActivities] = useState([]);
+  const [isLoadingRecentActivities, setIsLoadingRecentActivities] = useState(false);
+  const [recentActivitiesError, setRecentActivitiesError] = useState("");
   const [activitySummary, setActivitySummary] = useState({
     appointmentRequests: 0,
     staffActions: 0,
@@ -3090,10 +3092,15 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
   };
 
   const loadRecentActivities = useCallback(async () => {
+    setIsLoadingRecentActivities(true);
     try {
-      const response = await ApiService.getRecentActivities(30);
-      const activities = response?.activities || [];
+      const response = await ApiService.getRecentActivities(100, "monitor");
+      if (!response?.success || !Array.isArray(response.activities)) {
+        throw new Error("Activity response was unavailable.");
+      }
+      const activities = response.activities;
       setRecentActivities(activities);
+      setRecentActivitiesError("");
       setActivitySummary(
         response?.summary || {
           appointmentRequests: 0,
@@ -3108,7 +3115,9 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
         await handleAuthError();
         return;
       }
-      setRecentActivities([]);
+      setRecentActivitiesError("Could not load recent activity. Check the connection and refresh.");
+    } finally {
+      setIsLoadingRecentActivities(false);
     }
   }, [handleAuthError]);
 
@@ -3457,19 +3466,14 @@ const loadDashboardData = useCallback(async () => {
   const mapActivities = useMemo(
     () =>
       (recentActivities || []).filter((activity) => {
-        const activityType = String(activity?.activityType || "").toLowerCase();
-        if (!ADMIN_MAP_ACTIVITY_TYPES.has(activityType)) {
-          return false;
-        }
-
-        return Boolean(activity?.relatedVisitor || activity?.location || activity?.notes);
+        return getAdminMapFilterKey(activity?.activityType, activity?.accessType) !== "all";
       }),
     [recentActivities],
   );
 
   const filteredMapActivities = useMemo(() => {
     if (adminMapFilter === "all") return mapActivities;
-    return mapActivities.filter((activity) => getAdminMapFilterKey(activity?.activityType) === adminMapFilter);
+    return mapActivities.filter((activity) => getAdminMapFilterKey(activity?.activityType, activity?.accessType) === adminMapFilter);
   }, [adminMapFilter, mapActivities]);
 
   const mapActivityCounts = useMemo(
@@ -6310,7 +6314,7 @@ const loadDashboardData = useCallback(async () => {
 
   const renderAdminMapActivityItem = (activity, index, keySuffix = "activity") => {
     const marker = visibleAdminMapVisitors[index];
-    const filterKey = getAdminMapFilterKey(activity?.activityType);
+    const filterKey = getAdminMapFilterKey(activity?.activityType, activity?.accessType);
     const tone =
       filterKey === "issues" ? "#EF4444" :
       filterKey === "movement" ? "#0A3D91" :
@@ -6568,8 +6572,8 @@ const loadDashboardData = useCallback(async () => {
               <Ionicons name="radio-outline" size={20} color="#1C6DD0" />
               <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Activity Monitor</Text>
             </View>
-            <TouchableOpacity onPress={loadRecentActivities}>
-              <Text style={styles.viewAll}>Refresh</Text>
+            <TouchableOpacity onPress={loadRecentActivities} disabled={isLoadingRecentActivities} accessibilityRole="button">
+              <Text style={styles.viewAll}>{isLoadingRecentActivities ? "Refreshing..." : "Refresh"}</Text>
             </TouchableOpacity>
           </View>
 
@@ -6651,11 +6655,12 @@ const loadDashboardData = useCallback(async () => {
           )}
 
           <View style={styles.adminMapActivityList}>
-            {filteredMapActivities.length > 0
-              ? filteredMapActivities.slice(0, 5).map((activity, index) => renderAdminMapActivityItem(activity, index))
-              : renderAdminMapEmptyState({
-                  title: "No live activity for this view",
-                  message: "The selected activity type has no recent events. Switch filters or wait for the next map sync.",
+            {recentActivitiesError ? renderAdminMapEmptyState({ title: "Activity unavailable", message: recentActivitiesError, icon: "alert-circle-outline" }) : null}
+              {!recentActivitiesError && filteredMapActivities.length > 0
+                ? filteredMapActivities.slice(0, 5).map((activity, index) => renderAdminMapActivityItem(activity, index))
+                : !recentActivitiesError && renderAdminMapEmptyState({
+                  title: isLoadingRecentActivities ? "Loading activity" : "No recent activity for this view",
+                  message: isLoadingRecentActivities ? "Checking recent requests, approvals, and movement." : "No matching events were found in the latest 100 monitor events. Try another filter or refresh.",
                   icon: "radio-outline",
                 })}
           </View>

@@ -105,7 +105,7 @@ export const buildDepartmentFilterOptions = ({
 export const countMapActivitiesByFilter = (activities = [], getFilterKey) =>
   activities.reduce(
     (counts, activity) => {
-      const key = getFilterKey(activity?.activityType);
+      const key = getFilterKey(activity?.activityType, activity?.accessType);
       counts.all += 1;
       counts[key] = (counts[key] || 0) + 1;
       return counts;

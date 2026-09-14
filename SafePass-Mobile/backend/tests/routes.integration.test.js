@@ -598,6 +598,44 @@ test("admin health does not claim an unmonitored NFC reader is active", async ()
   assert.equal(response.body.health.nfcService, "Not monitored");
 });
 
+test("admin activity monitor filters events before applying its recent limit", async () => {
+  persistDoc({
+    _id: "admin-monitor", email: "monitor-admin@example.com", username: "monitoradmin",
+    password: "AdminPass123", role: "admin", status: "active", isVerified: true,
+  });
+  const token = jwt.sign({ userId: "admin-monitor" }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  const originalFind = AccessLogMock.find;
+  let query;
+  let requestedLimit;
+  AccessLogMock.find = (filter) => {
+    query = filter;
+    const chain = {
+      sort: () => chain,
+      limit: (value) => { requestedLimit = value; return chain; },
+      populate: () => chain,
+      then: (resolve, reject) => Promise.resolve([{
+        activityType: "visitor_appointment_request", accessType: "system",
+        relatedUser: null, relatedVisitor: null,
+        toObject: () => ({ activityType: "visitor_appointment_request", accessType: "system" }),
+      }]).then(resolve, reject),
+    };
+    return chain;
+  };
+
+  try {
+    const response = await requestJson("/api/admin/activities?scope=monitor&limit=100", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.activities[0].activityType, "visitor_appointment_request");
+    assert.equal(requestedLimit, 100);
+    assert.ok(query.$or[0].activityType.$in.includes("visitor_appointment_request"));
+    assert.deepEqual(query.$or[1].accessType.$in, ["entry", "exit"]);
+  } finally {
+    AccessLogMock.find = originalFind;
+  }
+});
+
 test("admin backup endpoint cannot report success without a real backup", async () => {
   persistDoc({
     _id: "admin-backup", email: "backup-admin@example.com", username: "backupadmin",

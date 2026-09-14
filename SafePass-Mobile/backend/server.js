@@ -13130,20 +13130,38 @@ app.get("/api/visitors/user/:userId", authMiddleware, async (req, res) => {
 
 // ============ ADMIN ROUTES (Existing) ============
 
+const ADMIN_MONITOR_ACTIVITY_TYPES = [
+  "visitor_account_registration", "visitor_registration_request", "visitor_appointment_request",
+  "visitor_registration_approved", "admin_approved_registration", "admin_rejected_registration",
+  "admin_updated_appointment_request", "staff_approved_appointment", "staff_adjusted_appointment",
+  "staff_redirected_appointment", "staff_redirected_approved_appointment",
+  "staff_rejected_appointment", "staff_completed_appointment",
+  "visitor_accepted_staff_adjustment", "visitor_declined_staff_adjustment",
+  "visitor_rescheduled_appointment", "visitor_rescheduled_approved_appointment",
+  "visitor_cancelled_appointment", "visitor_cancelled_approved_appointment",
+  "visitor_destination_redirected", "visitor_running_late", "visitor_reported",
+  "visitor_overstay_alert", "visitor_office_departure_overdue", "appointment_expired",
+  "appointment_no_show", "security_checkin", "security_checkout", "visitor_self_checkin",
+  "visitor_self_checkout", "station_checkin", "station_location_tap", "arduino_location_tap",
+  "nfc_card_checkin", "wrong_office_scan", "early_office_scan", "office_invalid_tap",
+  "office_wrong_location", "office_correct_location",
+];
+
 app.get("/api/admin/activities", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
-    const limit = Math.min(parseInt(req.query.limit || "60", 10), 200);
-    const activities = await AccessLog.find({
-      $or: [
-        { accessType: "system" },
-        { accessType: "entry" },
-        { accessType: "exit" },
-      ],
-    })
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 200);
+    const monitorScope = req.query.scope === "monitor";
+    const activityQuery = monitorScope
+      ? { $or: [
+          { activityType: { $in: ADMIN_MONITOR_ACTIVITY_TYPES } },
+          { accessType: { $in: ["entry", "exit"] } },
+        ] }
+      : { accessType: { $in: ["system", "entry", "exit"] } };
+    const activities = await AccessLog.find(activityQuery)
       .sort({ timestamp: -1 })
       .limit(limit)
       .populate("relatedVisitor", "fullName email visitDate visitTime purposeOfVisit assignedOffice host status appointmentStatus approvalStatus")

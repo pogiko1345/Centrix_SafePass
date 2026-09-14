@@ -2008,9 +2008,9 @@ async rejectVisitor(visitorId, reason) {
     }
   }
 
-  async getRecentActivities(limit = 10) {
+  async getRecentActivities(limit = 10, scope = "all") {
     try {
-      const response = await this.fetch(`/admin/activities?limit=${limit}`);
+      const response = await this.fetch(`/admin/activities?limit=${limit}&scope=${encodeURIComponent(scope)}`);
       return response;
     } catch (error) {
       console.error("Get recent activities error:", error);
