@@ -1297,6 +1297,7 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
   const [roomManagementPage, setRoomManagementPage] = useState(1);
   const [appointmentSearchDraft, setAppointmentSearchDraft] = useState("");
   const [appointmentSearchTerm, setAppointmentSearchTerm] = useState("");
+  const [appointmentSearchNotice, setAppointmentSearchNotice] = useState("");
   const [appointmentFilterDraft, setAppointmentFilterDraft] = useState(createAppointmentFilterDraft);
   const [appointmentAppliedFilters, setAppointmentAppliedFilters] = useState(createAppointmentFilterDraft);
   const [showAppointmentFilterDatePicker, setShowAppointmentFilterDatePicker] = useState(false);
@@ -2149,6 +2150,30 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
     };
   }, [appointmentManagementOptions, appointmentRecords]);
 
+  const matchesAppointmentSearch = (record, term) => recordMatchesSearch(record, term, [
+    "fullName",
+    "email",
+    "purposeOfVisit",
+    "purposeCategory",
+    "customPurposeOfVisit",
+    "visitType",
+    "assignedOffice",
+    "appointmentDepartment",
+    "host",
+    "approvalStatus",
+    "appointmentStatus",
+    "status",
+    (item) => getRequestStatus(item),
+    (item) => getVisitorSafePassId(item),
+    (item) => getVisitorNfcUid(item),
+    (item) => [
+      formatDateInputValue(item.visitDate || item.scheduledVisitStart || item.createdAt),
+      formatTimeInputValue(item.visitTime || item.scheduledVisitStart),
+      formatDateTime(item.visitDate || item.scheduledVisitStart || item.createdAt),
+      item.visitTime ? formatTime(item.visitTime) : "",
+    ],
+  ]);
+
   const filteredAppointmentRecords = useMemo(() => {
     const filters = appointmentAppliedFilters || createAppointmentFilterDraft();
     return appointmentRecords.filter((record) => {
@@ -2164,29 +2189,7 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
       if (filters.status !== "all" && status !== filters.status) return false;
       if (filters.purpose !== "all" && purpose !== filters.purpose) return false;
 
-      return recordMatchesSearch(record, appointmentSearchTerm, [
-        "fullName",
-        "email",
-        "purposeOfVisit",
-        "purposeCategory",
-        "customPurposeOfVisit",
-        "visitType",
-        "assignedOffice",
-        "appointmentDepartment",
-        "host",
-        "approvalStatus",
-        "appointmentStatus",
-        "status",
-        (item) => getRequestStatus(item),
-        (item) => getVisitorSafePassId(item),
-        (item) => getVisitorNfcUid(item),
-        (item) => [
-          formatDateInputValue(item.visitDate || item.scheduledVisitStart || item.createdAt),
-          formatTimeInputValue(item.visitTime || item.scheduledVisitStart),
-          formatDateTime(item.visitDate || item.scheduledVisitStart || item.createdAt),
-          item.visitTime ? formatTime(item.visitTime) : "",
-        ],
-      ]);
+      return matchesAppointmentSearch(record, appointmentSearchTerm);
     }).sort(compareAppointmentRecordsByLatest);
   }, [appointmentAppliedFilters, appointmentRecords, appointmentSearchTerm]);
 
@@ -2933,7 +2936,20 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
   };
 
   const applyAppointmentSearch = () => {
-    setAppointmentSearchTerm(appointmentSearchDraft.trim());
+    const term = appointmentSearchDraft.trim();
+    if (!term) {
+      setAppointmentSearchNotice("Enter a visitor name, date, time, office, or purpose to search.");
+      return;
+    }
+    if (!appointmentRecords.length) {
+      setAppointmentSearchNotice("There are no approved appointment records to search yet.");
+      return;
+    }
+    if (!appointmentRecords.some((record) => matchesAppointmentSearch(record, term))) {
+      setAppointmentSearchNotice("No appointment records match your search. Try another name, date, office, or purpose.");
+      return;
+    }
+    setAppointmentSearchTerm(term);
     setAppointmentRecordsPage(1);
   };
 
@@ -14022,6 +14038,31 @@ const loadDashboardData = useCallback(async () => {
                 {processingId === "edit-user" ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.submitButtonText}>Save Changes</Text>}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(appointmentSearchNotice)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAppointmentSearchNotice("")}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.confirmModal, isDarkMode && { backgroundColor: theme.cardBackground, borderColor: theme.borderColor }]}>
+            <View style={[styles.confirmIconWrap, styles.confirmIconInfo]}>
+              <Ionicons name="search-outline" size={30} color={ADMIN_BLUE} />
+            </View>
+            <Text style={[styles.confirmTitle, isDarkMode && styles.darkText]}>Appointment Search</Text>
+            <Text style={[styles.confirmMessage, isDarkMode && styles.darkTextSecondary]}>{appointmentSearchNotice}</Text>
+            <TouchableOpacity
+              style={[styles.confirmButton, { backgroundColor: ADMIN_BLUE }]}
+              onPress={() => setAppointmentSearchNotice("")}
+              accessibilityRole="button"
+              accessibilityLabel="Close appointment search message"
+            >
+              <Text style={styles.confirmButtonText}>OK</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
