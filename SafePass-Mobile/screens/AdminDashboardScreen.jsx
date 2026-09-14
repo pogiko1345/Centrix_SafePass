@@ -2086,6 +2086,20 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
     [appointmentRequests],
   );
 
+  const getVisitorSafePassId = (visitor = {}) =>
+    visitor.safePassId ||
+    visitor.relatedVisitor?.safePassId ||
+    "Not assigned";
+
+  const getVisitorNfcUid = (visitor = {}) =>
+    visitor.physicalNfcUid ||
+    visitor.nfcCardId ||
+    visitor.relatedUser?.physicalNfcUid ||
+    visitor.relatedUser?.nfcCardId ||
+    visitor.relatedVisitor?.physicalNfcUid ||
+    visitor.relatedVisitor?.nfcCardId ||
+    "Not assigned";
+
   const appointmentRecords = useMemo(
     () =>
       appointmentRequests
@@ -2640,20 +2654,6 @@ export default function AdminDashboardScreen({ navigation, onLogout }) {
       setIsUpdatingOffice(false);
     }
   };
-
-  const getVisitorSafePassId = (visitor = {}) =>
-    visitor.safePassId ||
-    visitor.relatedVisitor?.safePassId ||
-    "Not assigned";
-
-  const getVisitorNfcUid = (visitor = {}) =>
-    visitor.physicalNfcUid ||
-    visitor.nfcCardId ||
-    visitor.relatedUser?.physicalNfcUid ||
-    visitor.relatedUser?.nfcCardId ||
-    visitor.relatedVisitor?.physicalNfcUid ||
-    visitor.relatedVisitor?.nfcCardId ||
-    "Not assigned";
 
   const getCurrentChartData = () => visitorStats[activeChartDataset] || visitorStats.daily;
 
