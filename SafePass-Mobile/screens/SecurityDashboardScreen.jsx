@@ -25,7 +25,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from "../components/DateTimePicker";
 import ApiService from "../utils/ApiService";
 import { canAccessSecurityDashboard, normalizeRole } from "../utils/authFlow";
 import {

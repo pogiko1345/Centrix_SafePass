@@ -358,7 +358,7 @@ export default function VerificationScreen({ navigation, route }) {
         await Storage.removeItem("rememberedEmail");
       }
       if (rememberMe && email) {
-        await ApiService.trustDevice();
+        await ApiService.trustDevice(finalUser);
       } else if (email) {
         await ApiService.clearTrustedDevice();
       }

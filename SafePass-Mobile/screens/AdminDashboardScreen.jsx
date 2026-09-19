@@ -24,7 +24,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker from "../components/DateTimePicker";
 import ApiService from "../utils/ApiService";
 import { fetchAllAdminPages } from "../utils/adminPagination";
 import AIService from "../utils/AIService";

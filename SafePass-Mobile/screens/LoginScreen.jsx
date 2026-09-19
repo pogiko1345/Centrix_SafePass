@@ -1083,7 +1083,7 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
 
       setEmail(storedEmail);
       setPassword(storedPassword);
-      setRememberMe(true);
+      setRememberMe(false);
 
       const verifyResponse = await ApiService.verifyCredentials(storedEmail, storedPassword);
       if (!verifyResponse?.success) {
@@ -1102,12 +1102,28 @@ export default function LoginScreen({ navigation, route, onLoginSuccess }) {
         return;
       }
 
+      if (normalizedUser.status === "pending" || verifyResponse.status === "pending") {
+        await ApiService.clearAuth();
+        setLoginError("Your account is pending approval. Please wait for admin approval.");
+        return;
+      }
+
+      if (verifyResponse.requires2FA !== false) {
+        navigation.navigate("Verification", {
+          email: storedEmail,
+          password: storedPassword,
+          rememberMe: false,
+          tempToken: verifyResponse.tempToken,
+          user: normalizedUser,
+        });
+        return;
+      }
+
       await persistAuthenticatedSession({
         token: verifyResponse.tempToken,
         user: normalizedUser,
-        rememberEmail: true,
+        rememberEmail: false,
       });
-    await ApiService.trustDevice(normalizedUser);
 
       navigation.reset({
         index: 0,

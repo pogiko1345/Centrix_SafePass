@@ -71,7 +71,6 @@ const DEFAULT_PROFILE = {
   profilePhoto: null,
 };
 
-const LANGUAGES = ["English", "Filipino / Tagalog"];
 const BIOMETRIC_LOGIN_EMAIL_KEY = "biometricLoginEmail";
 const BIOMETRIC_LOGIN_PASSWORD_KEY = "biometricLoginPassword";
 
@@ -96,7 +95,6 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState("English");
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -134,7 +132,6 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
     notificationsEnabled,
     biometricEnabled,
     darkModeEnabled,
-    selectedLanguage,
     profile,
   ]);
 
@@ -205,19 +202,17 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
 
   const loadPreferences = async () => {
     try {
-      const [notifications, biometric, darkMode, language] = await Promise.all([
+      const [notifications, biometric, darkMode] = await Promise.all([
         Storage.getItem("notificationsEnabled"),
         Storage.getItem("biometricEnabled"),
         Storage.getItem("darkModeEnabled").then(async (value) =>
           value !== null ? value : Storage.getItem("isDarkMode"),
         ),
-        Storage.getItem("selectedLanguage"),
       ]);
       if (notifications !== null)
         setNotificationsEnabled(notifications === "true");
       if (biometric !== null) setBiometricEnabled(biometric === "true");
       if (darkMode !== null) setDarkModeEnabled(darkMode === "true");
-      if (language) setSelectedLanguage(language);
     } catch (e) {
       console.error("Load preferences error:", e);
     }
@@ -230,7 +225,6 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
         Storage.setItem("biometricEnabled", String(biometricEnabled)),
         Storage.setItem("darkModeEnabled", String(darkModeEnabled)),
         Storage.setItem("isDarkMode", JSON.stringify(darkModeEnabled)),
-        Storage.setItem("selectedLanguage", selectedLanguage),
       ]);
     } catch (e) {
       console.error("Save preferences error:", e);
@@ -562,22 +556,6 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
     } catch {
       setBiometricEnabled(false);
     }
-  };
-
-  const showLanguagePicker = () => {
-    if (Platform.OS === "web") {
-      const currentIndex = LANGUAGES.indexOf(selectedLanguage);
-      setSelectedLanguage(LANGUAGES[(currentIndex + 1) % LANGUAGES.length]);
-      return;
-    }
-
-    Alert.alert("Select Language", "Choose your preferred language", [
-      ...LANGUAGES.map((language) => ({
-        text: language,
-        onPress: () => setSelectedLanguage(language),
-      })),
-      { text: "Cancel", style: "cancel" },
-    ]);
   };
 
   const performLogout = async () => {
@@ -1015,15 +993,14 @@ export default function ProfileScreenV2({ navigation, onLogout }) {
           thumbColor="#FFFFFF"
         />
       </View>
-      <TouchableOpacity style={[styles.prefRow, isDarkProfile && styles.darkPrefRow]} onPress={showLanguagePicker}>
+      <View style={[styles.prefRow, isDarkProfile && styles.darkPrefRow]}>
         <View style={styles.prefText}>
           <Text style={[styles.prefTitle, isDarkProfile && styles.darkText]}>Language</Text>
           <Text style={themedMutedStyle}>
-            Current selection: {selectedLanguage}
+            English. Filipino / Tagalog is not available yet.
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color="#64748B" />
-      </TouchableOpacity>
+      </View>
     </View>
   );
 
