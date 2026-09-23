@@ -6915,7 +6915,9 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
       <View style={visitorDashboardStyles.visitorMapActionRow}>
         <AnimatedPressable
           style={visitorDashboardStyles.visitorMapPrimaryAction}
-          onPress={() => setSelectedVisitorMapFloor(visitorDestinationInfo.floorId || "ground")}
+          onPress={() => handleVisitorRouteNavigation("WebMapScreen", {
+            destinationOffice: visitorDestinationInfo.officeName,
+          })}
           activeOpacity={0.88}
         >
           <Ionicons name="navigate" size={17} color="#FFFFFF" />
