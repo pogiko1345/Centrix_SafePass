@@ -142,6 +142,30 @@ test('visitor profile editing is mounted and uses the backend phone field', () =
   assert.match(saveHandler, /phone:\s*profileEditForm\.phoneNumber\.trim\(\)/);
 });
 
+test('visitor Edit Profile opens with account details when no visitor record exists', () => {
+  const source = fs.readFileSync(path.join(root, 'screens/VisitorDashboardScreen.jsx'), 'utf8');
+  let handlerSource;
+  traverse(parser.parse(source, { sourceType: 'module', plugins: ['jsx'] }), { VariableDeclarator(p) {
+    if (p.node.id.name === 'handleEditProfilePress') handlerSource = source.slice(p.node.init.start, p.node.init.end);
+  } });
+  assert.ok(handlerSource);
+  let form;
+  let opened = false;
+  const context = {
+    visitor: null,
+    currentUser: { firstName: 'Ana', lastName: 'Santos', email: 'ana@example.com', phone: '09171234567' },
+    displayName: 'Ana Santos',
+    setProfileEditForm: value => { form = value; },
+    setShowProfileEditModal: value => { opened = value; },
+  };
+  vm.runInNewContext(`(${handlerSource})()`, context);
+  assert.equal(opened, true);
+  assert.equal(form.firstName, 'Ana');
+  assert.equal(form.lastName, 'Santos');
+  assert.equal(form.email, 'ana@example.com');
+  assert.equal(form.phoneNumber, '09171234567');
+});
+
 test('new appointment requests require a fresh time and format slots as wall-clock values', () => {
   const source = fs.readFileSync(path.join(root, 'screens/VisitorDashboardScreen.jsx'), 'utf8');
   assert.match(source, /const buildAppointmentForm[\s\S]*?preferredTime:\s*null/);

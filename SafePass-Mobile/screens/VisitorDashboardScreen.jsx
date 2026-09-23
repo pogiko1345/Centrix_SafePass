@@ -4711,17 +4711,15 @@ export default function VisitorDashboardScreen({ navigation, onLogout }) {
 
 
   const handleEditProfilePress = () => {
-    if (visitor) {
-      const fullNameParts = String(visitor.fullName || "").trim().split(/\s+/).filter(Boolean);
-      setProfileEditForm({
-        firstName: currentUser?.firstName || visitor.firstName || fullNameParts[0] || '',
-        lastName: currentUser?.lastName || visitor.lastName || fullNameParts.slice(1).join(' ') || '',
-        email: currentUser?.email || visitor.email || '',
-        phoneNumber: currentUser?.phone || visitor.phoneNumber || '',
-        emergencyContact: currentUser?.emergencyContact || visitor.emergencyContact || ''
-      });
-      setShowProfileEditModal(true);
-    }
+    const fullNameParts = String(visitor?.fullName || displayName || "").trim().split(/\s+/).filter(Boolean);
+    setProfileEditForm({
+      firstName: currentUser?.firstName || visitor?.firstName || fullNameParts[0] || "",
+      lastName: currentUser?.lastName || visitor?.lastName || fullNameParts.slice(1).join(" ") || "",
+      email: currentUser?.email || visitor?.email || "",
+      phoneNumber: currentUser?.phone || visitor?.phoneNumber || "",
+      emergencyContact: currentUser?.emergencyContact || visitor?.emergencyContact || "",
+    });
+    setShowProfileEditModal(true);
   };
 
   const handleProfileEditCancel = () => {
